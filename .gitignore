@@ -1,5 +1,5 @@
 # Python
 __pycache__/
-data/
-output/
-tests/
+/data/
+/output/
+/tests/
