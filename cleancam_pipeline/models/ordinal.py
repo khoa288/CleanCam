@@ -66,6 +66,8 @@ def compute_coral_loss(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tens
     """
     # Convert labels to levels (binary encoding)
     levels = levels_from_labelbatch(labels, num_classes=logits.size(1) + 1)
+    # Ensure levels are on the same device as logits
+    levels = levels.to(logits.device)
     return coral_loss(logits, levels)
 
 
@@ -80,6 +82,8 @@ def compute_corn_loss(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tenso
     Returns:
         CORN loss value
     """
+    # Ensure labels are on the same device as logits
+    labels = labels.to(logits.device)
     return corn_loss(logits, labels, num_classes=logits.size(1) + 1)
 
 
