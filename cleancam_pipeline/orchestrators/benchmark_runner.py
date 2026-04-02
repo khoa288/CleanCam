@@ -56,12 +56,47 @@ def run_benchmark(
         )
 
         for model_name in cfg.models:
-            for seed in cfg.seeds:
-                seed_dir = out.get_benchmark_output_dir(model_name, setting_name, seed)
-                result = train_one_setting(
-                    train_df, val_df, test_df, model_name, setting_name, seed, cfg, seed_dir
-                )
-                run_results.append(result)
+            for ordinal_method in cfg.ordinal_methods:
+                for seed in cfg.seeds:
+                    # Create a temporary config with single ordinal_method for this run
+                    run_cfg = BenchmarkConfig(
+                        image_size=cfg.image_size,
+                        batch_size=cfg.batch_size,
+                        num_workers=cfg.num_workers,
+                        epochs=cfg.epochs,
+                        patience=cfg.patience,
+                        learning_rate=cfg.learning_rate,
+                        weight_decay=cfg.weight_decay,
+                        seeds=(seed,),
+                        models=(model_name,),
+                        ordinal_methods=(ordinal_method,),
+                        use_weighted_sampler=cfg.use_weighted_sampler,
+                        use_class_weights=cfg.use_class_weights,
+                        train_on_gpu_if_available=cfg.train_on_gpu_if_available,
+                        save_best_checkpoints=cfg.save_best_checkpoints,
+                        use_amp=cfg.use_amp,
+                        persistent_workers=cfg.persistent_workers,
+                        prefetch_factor=cfg.prefetch_factor,
+                        log_interval=cfg.log_interval,
+                        use_wandb=cfg.use_wandb,
+                        wandb_project=cfg.wandb_project,
+                        wandb_entity=cfg.wandb_entity,
+                        wandb_mode=cfg.wandb_mode,
+                        wandb_run_prefix=cfg.wandb_run_prefix,
+                    )
+                    
+                    # Create output directory with ordinal method suffix
+                    method_suffix = f"_{ordinal_method}" if ordinal_method else ""
+                    seed_dir = out.get_benchmark_output_dir(
+                        f"{model_name}{method_suffix}", setting_name, seed
+                    )
+                    
+                    result = train_one_setting(
+                        train_df, val_df, test_df, model_name, setting_name, seed, run_cfg, seed_dir
+                    )
+                    # Add ordinal_method to result for tracking
+                    result["ordinal_method"] = ordinal_method
+                    run_results.append(result)
 
     manifest_df = pd.DataFrame(manifest_rows)
     save_table(manifest_df, out.tables_root / "benchmark_setting_manifest.csv")

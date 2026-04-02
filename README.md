@@ -70,6 +70,7 @@ This pipeline provides comprehensive tools for analyzing the CleanCam dataset an
 
 ### CNN Benchmarking
 - Multiple architectures (ResNet18, MobileNetV2, EfficientNet-B0)
+- Ordinal regression methods (CORAL, CORN) for ordinal classification
 - Multiple seeds for statistical significance
 - Four benchmark settings (primary + robustness)
 - Comprehensive metrics (accuracy, F1, kappa, MAE, within-1)
@@ -215,6 +216,7 @@ python cleancam_pipeline_complete.py \
 --weight-decay 0.0001            # Weight decay
 --patience 7                     # Early stopping patience
 --seeds 42 43 44                 # Random seeds for multiple runs
+--ordinal-methods coral corn     # Ordinal regression methods (can specify multiple)
 
 # Data loading
 --num-workers 4                  # DataLoader workers
@@ -399,6 +401,7 @@ config = BenchmarkConfig(
     # Experiment settings
     seeds=(42, 43, 44),
     models=("mobilenet_v2", "resnet18", "efficientnet_b0"),
+    ordinal_methods=(None,),  # Tuple of None, "coral", or "corn"
     
     # Sampling and weighting
     use_weighted_sampler=True,
@@ -453,6 +456,90 @@ Four benchmark settings are supported:
 4. **train_real_plus_synthetic → eval_real_plus_synthetic** (Robustness)
    - Train on real + synthetic images
    - Evaluate on real + synthetic images
+
+### Ordinal Regression Methods
+
+The CleanCam classification task is inherently ordinal (labels 1-5 represent increasing dirt levels). Standard cross-entropy loss treats classes as independent, ignoring this ordering. Ordinal regression methods leverage the ordinal structure for better performance.
+
+#### CORAL (Consistent Rank Logits)
+
+CORAL reformulates ordinal regression as a series of binary classification tasks with weight sharing. For K classes, it predicts K-1 cumulative probabilities: P(Y > k) for k = 0, ..., K-2.
+
+**Usage:**
+```bash
+python cleancam_pipeline.py \
+    --release-root /path/to/CleanCam_release \
+    --output-root ./output \
+    --run-benchmark \
+    --ordinal-methods coral \
+    --models resnet18 mobilenet_v2 efficientnet_b0
+```
+
+**Benefits:**
+- Enforces rank consistency in predictions
+- Better MAE and weighted kappa scores
+- More robust to label noise
+
+**Reference:** [Cao et al. 2020 - Rank Consistent Ordinal Regression](https://arxiv.org/abs/1901.07884)
+
+#### CORN (Conditional Ordinal Regression for Neural networks)
+
+CORN uses conditional probabilities P(Y > k | Y > k-1) to model the ordinal structure. This approach is more flexible than CORAL and often achieves better performance.
+
+**Usage:**
+```bash
+python cleancam_pipeline.py \
+    --release-root /path/to/CleanCam_release \
+    --output-root ./output \
+    --run-benchmark \
+    --ordinal-methods corn \
+    --models resnet18 mobilenet_v2 efficientnet_b0
+```
+
+**Benefits:**
+- More flexible than CORAL
+- Better captures ordinal relationships
+- Often achieves best MAE and kappa scores
+
+**Reference:** [Shi et al. 2021 - CORN](https://arxiv.org/abs/2111.08851)
+
+#### Compare Multiple Methods
+
+You can test multiple ordinal methods in a single run:
+
+```bash
+python cleancam_pipeline.py \
+    --release-root /path/to/CleanCam_release \
+    --output-root ./output \
+    --run-benchmark \
+    --ordinal-methods coral corn \
+    --models resnet18 mobilenet_v2 efficientnet_b0
+```
+
+This will train each model with both CORAL and CORN, allowing direct comparison.
+
+#### Standard Cross-Entropy (Default)
+
+When `--ordinal-methods` is not specified, standard cross-entropy loss is used. This treats the problem as nominal classification.
+
+**Usage:**
+```bash
+python cleancam_pipeline.py \
+    --release-root /path/to/CleanCam_release \
+    --output-root ./output \
+    --run-benchmark \
+    --models resnet18 mobilenet_v2 efficientnet_b0
+```
+
+#### Comparison
+
+| Method | Loss Type | Ordinal Structure | Best For |
+|--------|-----------|-------------------|----------|
+| Cross-Entropy | Nominal | No | General classification |
+| CORAL | Ordinal | Yes (cumulative) | Balanced performance |
+| CORN | Ordinal | Yes (conditional) | Best ordinal metrics |
+
+**Recommendation:** For the CleanCam ordinal task, try CORN first for best MAE and weighted kappa scores.
 
 ---
 
@@ -585,8 +672,18 @@ eval_loader = make_eval_loader(df, transform, config)
 
 #### Building
 ```python
-model = build_model(model_name: str, num_classes: int = 5)
-# Supported: "resnet18", "mobilenet_v2", "efficientnet_b0"
+model = build_model(model_name: str, num_classes: int = 5, ordinal_method: str = None)
+# Supported models: "resnet18", "mobilenet_v2", "efficientnet_b0"
+# Supported ordinal methods: None, "coral", "corn"
+
+# Standard classification
+model = build_model("resnet18")
+
+# CORAL ordinal regression
+model = build_model("resnet18", ordinal_method="coral")
+
+# CORN ordinal regression
+model = build_model("mobilenet_v2", ordinal_method="corn")
 ```
 
 #### Training
@@ -600,9 +697,12 @@ result = train_one_setting(
 
 #### Evaluation
 ```python
-metrics = evaluate_model(model, loader, device)
+metrics = evaluate_model(model, loader, device, ordinal_method=None)
 # Returns: accuracy, macro_f1, weighted_kappa, mae, within1,
 #          per_class_rows, confusion_matrix, binary_metrics, etc.
+
+# For ordinal models, pass the ordinal_method
+metrics = evaluate_model(model, loader, device, ordinal_method="coral")
 ```
 
 #### Aggregation

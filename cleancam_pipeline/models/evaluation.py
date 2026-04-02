@@ -1,6 +1,6 @@
 """Model evaluation utilities."""
 
-from typing import Dict
+from typing import Dict, Optional
 
 import numpy as np
 import torch
@@ -17,11 +17,19 @@ from sklearn.metrics import (
 from torch.utils.data import DataLoader
 
 from cleancam_pipeline.core.constants import INDEX_TO_LABEL, LABEL_TO_INDEX, LABELS
+from cleancam_pipeline.models.ordinal import (
+    get_ordinal_probabilities,
+    predict_from_coral_logits,
+    predict_from_corn_logits,
+)
 from cleancam_pipeline.utils.metrics import compute_within_one_accuracy
 
 
 def evaluate_model(
-    model: nn.Module, loader: DataLoader, device: torch.device
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+    ordinal_method: Optional[str] = None,
 ) -> Dict[str, object]:
     """
     Evaluate model on a dataset.
@@ -30,6 +38,7 @@ def evaluate_model(
         model: PyTorch model
         loader: DataLoader for evaluation
         device: Device to run evaluation on
+        ordinal_method: Ordinal regression method ('coral', 'corn', or None)
 
     Returns:
         Dictionary containing all evaluation metrics
@@ -48,10 +57,21 @@ def evaluate_model(
             targets_all.append(y.detach().cpu())
             ids_all.extend(list(ids))
 
-    logits = torch.cat(logits_all, dim=0).numpy()
+    logits = torch.cat(logits_all, dim=0)
     targets_idx = torch.cat(targets_all, dim=0).numpy()
-    probs = torch.softmax(torch.tensor(logits), dim=1).numpy()
-    preds_idx = probs.argmax(axis=1)
+
+    # Handle ordinal vs standard predictions
+    if ordinal_method == "coral":
+        preds_idx = predict_from_coral_logits(logits).numpy()
+        probs = get_ordinal_probabilities(logits, "coral").numpy()
+    elif ordinal_method == "corn":
+        preds_idx = predict_from_corn_logits(logits).numpy()
+        probs = get_ordinal_probabilities(logits, "corn").numpy()
+    else:
+        # Standard classification
+        logits = logits.numpy()
+        probs = torch.softmax(torch.tensor(logits), dim=1).numpy()
+        preds_idx = probs.argmax(axis=1)
 
     true_labels = np.array([INDEX_TO_LABEL[idx] for idx in targets_idx])
     pred_labels = np.array([INDEX_TO_LABEL[idx] for idx in preds_idx])

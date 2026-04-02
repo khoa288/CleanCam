@@ -67,6 +67,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--patience", type=int, default=7)
+    parser.add_argument(
+        "--ordinal-methods",
+        nargs="+",
+        choices=["coral", "corn"],
+        default=None,
+        help="Ordinal regression methods (CORAL and/or CORN). If not specified, uses standard cross-entropy. Can specify multiple: --ordinal-methods coral corn",
+    )
     parser.add_argument("--disable-weighted-sampler", action="store_true")
     parser.add_argument("--enable-class-weights", action="store_true")
     parser.add_argument("--cpu-only", action="store_true")

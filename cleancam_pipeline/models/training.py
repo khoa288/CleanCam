@@ -18,6 +18,7 @@ from cleancam_pipeline.data.loaders import make_eval_loader, make_train_loader
 from cleancam_pipeline.data.transforms import build_transforms
 from cleancam_pipeline.models.builder import build_model, compute_loss_fn
 from cleancam_pipeline.models.evaluation import evaluate_model
+from cleancam_pipeline.models.ordinal import compute_coral_loss, compute_corn_loss
 from cleancam_pipeline.utils.io import save_table
 from cleancam_pipeline.utils.metrics import format_label_distribution
 from cleancam_pipeline.utils.seed import set_seed
@@ -144,8 +145,9 @@ def train_one_setting(
     run = maybe_init_wandb(cfg, model_name, setting_name, seed, output_dir)
 
     # Build model and training components
-    model = build_model(model_name).to(device)
-    criterion = compute_loss_fn(train_df, cfg, device)
+    ordinal_method = cfg.ordinal_methods[0] if cfg.ordinal_methods else None
+    model = build_model(model_name, ordinal_method=ordinal_method).to(device)
+    criterion = compute_loss_fn(train_df, cfg, device, ordinal_method=ordinal_method)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay
     )
@@ -175,7 +177,13 @@ def train_one_setting(
 
             with autocast_context(device, cfg.use_amp):
                 logits = model(x)
-                loss = criterion(logits, y)
+                # Compute loss based on ordinal method
+                if ordinal_method == "coral":
+                    loss = compute_coral_loss(logits, y)
+                elif ordinal_method == "corn":
+                    loss = compute_corn_loss(logits, y)
+                else:
+                    loss = criterion(logits, y)
 
             if scaler.is_enabled():
                 scaler.scale(loss).backward()
@@ -197,7 +205,7 @@ def train_one_setting(
                 )
 
         train_loss = running_loss / max(n_seen, 1)
-        val_metrics = evaluate_model(model, val_loader, device)
+        val_metrics = evaluate_model(model, val_loader, device, ordinal_method=ordinal_method)
         current_lr = float(optimizer.param_groups[0]["lr"])
         improved = val_metrics["macro_f1"] > best_val_macro_f1
         scheduler.step(val_metrics["macro_f1"])
@@ -264,8 +272,8 @@ def train_one_setting(
 
     # Final evaluation
     model.load_state_dict(best_state)
-    val_metrics = evaluate_model(model, val_loader, device)
-    test_metrics = evaluate_model(model, test_loader, device)
+    val_metrics = evaluate_model(model, val_loader, device, ordinal_method=ordinal_method)
+    test_metrics = evaluate_model(model, test_loader, device, ordinal_method=ordinal_method)
     total_time = time.time() - start
 
     # Save outputs

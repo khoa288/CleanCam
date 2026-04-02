@@ -20,6 +20,7 @@ class BenchmarkConfig:
     weight_decay: float = 1e-4
     seeds: Tuple[int, ...] = (42, 43, 44)
     models: Tuple[str, ...] = ("mobilenet_v2", "resnet18", "efficientnet_b0")
+    ordinal_methods: Tuple[Optional[str], ...] = (None,)  # Tuple of None, 'coral', or 'corn'
     use_weighted_sampler: bool = True
     use_class_weights: bool = False
     train_on_gpu_if_available: bool = True
@@ -54,10 +55,18 @@ class BenchmarkConfig:
             raise ValueError("seeds tuple cannot be empty")
         if self.wandb_mode not in ("online", "offline", "disabled"):
             raise ValueError("wandb_mode must be 'online', 'offline', or 'disabled'")
+        if not self.ordinal_methods:
+            raise ValueError("ordinal_methods tuple cannot be empty")
+        for method in self.ordinal_methods:
+            if method not in (None, "coral", "corn"):
+                raise ValueError(f"ordinal_method must be None, 'coral', or 'corn', got: {method}")
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> BenchmarkConfig:
         """Create configuration from command-line arguments."""
+        # Handle ordinal_methods - convert list to tuple, handle None
+        ordinal_methods = tuple(args.ordinal_methods) if hasattr(args, 'ordinal_methods') and args.ordinal_methods else (None,)
+        
         return cls(
             image_size=args.image_size,
             batch_size=args.batch_size,
@@ -68,6 +77,7 @@ class BenchmarkConfig:
             weight_decay=args.weight_decay,
             seeds=tuple(args.seeds),
             models=tuple(args.models),
+            ordinal_methods=ordinal_methods,
             use_weighted_sampler=not args.disable_weighted_sampler,
             use_class_weights=args.enable_class_weights,
             train_on_gpu_if_available=not args.cpu_only,
