@@ -77,6 +77,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disable-weighted-sampler", action="store_true")
     parser.add_argument("--enable-class-weights", action="store_true")
     parser.add_argument("--cpu-only", action="store_true")
+    parser.add_argument("--single-gpu", action="store_true", help="Disable multi-GPU training (use only 1 GPU)")
     parser.add_argument("--no-save-checkpoints", action="store_true")
     parser.add_argument("--no-amp", action="store_true")
     parser.add_argument("--no-persistent-workers", action="store_true")

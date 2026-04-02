@@ -88,12 +88,17 @@ def print_run_header(
     cfg: BenchmarkConfig,
 ) -> None:
     """Print training run header with configuration."""
+    gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    multi_gpu = " (multi-GPU)" if gpu_count > 1 and cfg.train_on_gpu_if_available and cfg.use_multi_gpu else ""
+    
     print("=" * 100, flush=True)
     print(
-        f"[RunStart] model={model_name} setting={setting_name} seed={seed} device={device} "
+        f"[RunStart] model={model_name} setting={setting_name} seed={seed} device={device}{multi_gpu} "
         f"amp={cfg.use_amp and device.type == 'cuda'} batch_size={cfg.batch_size} workers={cfg.num_workers} lr={cfg.learning_rate}",
         flush=True,
     )
+    if gpu_count > 1 and cfg.train_on_gpu_if_available and cfg.use_multi_gpu:
+        print(f"[MultiGPU] Using {gpu_count} GPUs with DataParallel", flush=True)
     print(
         f"[Data] train={len(train_df)} ({format_label_distribution(train_df)}) | "
         f"val={len(val_df)} ({format_label_distribution(val_df)}) | "
@@ -146,7 +151,14 @@ def train_one_setting(
 
     # Build model and training components
     ordinal_method = cfg.ordinal_methods[0] if cfg.ordinal_methods else None
-    model = build_model(model_name, ordinal_method=ordinal_method).to(device)
+    model = build_model(model_name, ordinal_method=ordinal_method)
+    
+    # Multi-GPU support using DataParallel
+    if torch.cuda.is_available() and torch.cuda.device_count() > 1 and cfg.train_on_gpu_if_available and cfg.use_multi_gpu:
+        print(f"[MultiGPU] Using {torch.cuda.device_count()} GPUs with DataParallel", flush=True)
+        model = nn.DataParallel(model)
+    
+    model = model.to(device)
     criterion = compute_loss_fn(train_df, cfg, device, ordinal_method=ordinal_method)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay

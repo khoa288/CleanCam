@@ -73,6 +73,7 @@ def run_benchmark(
                         use_weighted_sampler=cfg.use_weighted_sampler,
                         use_class_weights=cfg.use_class_weights,
                         train_on_gpu_if_available=cfg.train_on_gpu_if_available,
+                        use_multi_gpu=cfg.use_multi_gpu,
                         save_best_checkpoints=cfg.save_best_checkpoints,
                         use_amp=cfg.use_amp,
                         persistent_workers=cfg.persistent_workers,

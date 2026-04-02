@@ -24,6 +24,7 @@ class BenchmarkConfig:
     use_weighted_sampler: bool = True
     use_class_weights: bool = False
     train_on_gpu_if_available: bool = True
+    use_multi_gpu: bool = True  # Enable DataParallel for multi-GPU training
     save_best_checkpoints: bool = True
     use_amp: bool = True
     persistent_workers: bool = True
@@ -81,6 +82,7 @@ class BenchmarkConfig:
             use_weighted_sampler=not args.disable_weighted_sampler,
             use_class_weights=args.enable_class_weights,
             train_on_gpu_if_available=not args.cpu_only,
+            use_multi_gpu=not args.single_gpu if hasattr(args, 'single_gpu') else True,
             save_best_checkpoints=not args.no_save_checkpoints,
             use_amp=not args.no_amp,
             persistent_workers=not args.no_persistent_workers,

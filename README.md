@@ -227,6 +227,7 @@ python cleancam_pipeline_complete.py \
 --disable-weighted-sampler       # Disable weighted sampling
 --enable-class-weights           # Use class weights in loss
 --cpu-only                       # Force CPU training
+--single-gpu                     # Disable multi-GPU (use only 1 GPU)
 --no-save-checkpoints            # Don't save model checkpoints
 --no-amp                         # Disable mixed precision
 --no-persistent-workers          # Disable persistent workers
@@ -899,10 +900,41 @@ wandb login
 ### Performance Tips
 
 1. **Use GPU** - 10-20x faster training
-2. **Enable AMP** - 2x faster with minimal accuracy loss
-3. **Increase workers** - Better CPU utilization
-4. **Use persistent workers** - Avoid respawning overhead
-5. **Batch size** - Larger batches = faster training (if memory allows)
+2. **Multi-GPU** - Automatically uses all available GPUs with DataParallel
+3. **Enable AMP** - 2x faster with minimal accuracy loss
+4. **Increase workers** - Better CPU utilization
+5. **Use persistent workers** - Avoid respawning overhead
+6. **Batch size** - Larger batches = faster training (if memory allows)
+
+### Multi-GPU Training
+
+The pipeline automatically detects and uses all available GPUs using PyTorch's DataParallel:
+
+```bash
+# Check available GPUs
+python -c "import torch; print(f'GPUs: {torch.cuda.device_count()}')"
+
+# Multi-GPU training (automatic)
+python cleancam_pipeline.py ... --run-benchmark
+
+# Force single GPU
+python cleancam_pipeline.py ... --run-benchmark --single-gpu
+
+# Force CPU
+python cleancam_pipeline.py ... --run-benchmark --cpu-only
+```
+
+**Output example with multi-GPU:**
+```
+[RunStart] model=resnet18 setting=train_real_only__eval_real_only seed=42 device=cuda (multi-GPU) ...
+[MultiGPU] Using 4 GPUs with DataParallel
+```
+
+**Notes:**
+- DataParallel automatically splits batches across GPUs
+- Effective batch size = `batch_size` per GPU
+- Best for 2-4 GPUs (for 4+ GPUs, consider DistributedDataParallel)
+- Requires CUDA-capable GPUs
 
 ### Debugging
 
