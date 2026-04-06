@@ -21,6 +21,7 @@ class BenchmarkConfig:
     seeds: Tuple[int, ...] = (42, 43, 44)
     models: Tuple[str, ...] = ("mobilenet_v2", "resnet18", "efficientnet_b0")
     ordinal_methods: Tuple[Optional[str], ...] = (None,)  # Tuple of None, 'coral', or 'corn'
+    benchmark_settings: Tuple[str, ...] = None  # None means use ALL_SETTINGS, or specify subset
     use_weighted_sampler: bool = True
     use_class_weights: bool = False
     train_on_gpu_if_available: bool = True
@@ -61,12 +62,22 @@ class BenchmarkConfig:
         for method in self.ordinal_methods:
             if method not in (None, "coral", "corn"):
                 raise ValueError(f"ordinal_method must be None, 'coral', or 'corn', got: {method}")
+        
+        # Validate benchmark_settings if specified
+        if self.benchmark_settings is not None:
+            from cleancam_pipeline.core.constants import ALL_SETTINGS
+            for setting in self.benchmark_settings:
+                if setting not in ALL_SETTINGS:
+                    raise ValueError(f"Invalid benchmark setting: {setting}. Must be one of {ALL_SETTINGS}")
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> BenchmarkConfig:
         """Create configuration from command-line arguments."""
         # Handle ordinal_methods - convert list to tuple, handle None
         ordinal_methods = tuple(args.ordinal_methods) if hasattr(args, 'ordinal_methods') and args.ordinal_methods else (None,)
+        
+        # Handle benchmark_settings - convert list to tuple if specified
+        benchmark_settings = tuple(args.benchmark_settings) if hasattr(args, 'benchmark_settings') and args.benchmark_settings else None
         
         return cls(
             image_size=args.image_size,
@@ -79,6 +90,7 @@ class BenchmarkConfig:
             seeds=tuple(args.seeds),
             models=tuple(args.models),
             ordinal_methods=ordinal_methods,
+            benchmark_settings=benchmark_settings,
             use_weighted_sampler=not args.disable_weighted_sampler,
             use_class_weights=args.enable_class_weights,
             train_on_gpu_if_available=not args.cpu_only,

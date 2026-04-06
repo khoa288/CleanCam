@@ -15,8 +15,8 @@ PRIMARY_SETTINGS: Tuple[str, ...] = (
 
 ALL_SETTINGS: Tuple[str, ...] = (
     "train_real_only__eval_real_only",
-    "train_real_plus_synthetic__eval_real_only",
     "train_real_only__eval_real_plus_synthetic",
+    "train_real_plus_synthetic__eval_real_only",
     "train_real_plus_synthetic__eval_real_plus_synthetic",
 )
 

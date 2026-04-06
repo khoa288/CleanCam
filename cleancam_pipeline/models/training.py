@@ -50,6 +50,7 @@ def maybe_init_wandb(
     model_name: str,
     setting_name: str,
     seed: int,
+    ordinal_method: Optional[str],
     output_dir: Path,
 ):
     """Initialize Weights & Biases logging if enabled."""
@@ -59,12 +60,18 @@ def maybe_init_wandb(
         raise ImportError(
             "wandb is not installed. Install it with `pip install wandb` or disable --use-wandb."
         )
+    
+    # Build run name with ordinal method if specified
+    method_suffix = f"-{ordinal_method}" if ordinal_method else ""
+    run_name = f"{cfg.wandb_run_prefix}-{model_name}{method_suffix}-{setting_name}-seed{seed}"
+    group_name = f"{model_name}{method_suffix}-{setting_name}"
+    
     return wandb.init(
         project=cfg.wandb_project,
         entity=cfg.wandb_entity,
         mode=cfg.wandb_mode,
-        name=f"{cfg.wandb_run_prefix}-{model_name}-{setting_name}-seed{seed}",
-        group=f"{model_name}-{setting_name}",
+        name=run_name,
+        group=group_name,
         dir=str(output_dir),
         config=asdict(cfg),
         reinit=True,
@@ -147,7 +154,7 @@ def train_one_setting(
     print_run_header(
         model_name, setting_name, seed, device, train_df, val_df, test_df, cfg
     )
-    run = maybe_init_wandb(cfg, model_name, setting_name, seed, output_dir)
+    run = maybe_init_wandb(cfg, model_name, setting_name, seed, ordinal_method, output_dir)
 
     # Build model and training components
     ordinal_method = cfg.ordinal_methods[0] if cfg.ordinal_methods else None

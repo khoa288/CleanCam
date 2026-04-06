@@ -74,6 +74,18 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Ordinal regression methods (CORAL and/or CORN). If not specified, uses standard cross-entropy. Can specify multiple: --ordinal-methods coral corn",
     )
+    parser.add_argument(
+        "--benchmark-settings",
+        nargs="+",
+        choices=[
+            "train_real_only__eval_real_only",
+            "train_real_only__eval_real_plus_synthetic",
+            "train_real_plus_synthetic__eval_real_only",
+            "train_real_plus_synthetic__eval_real_plus_synthetic",
+        ],
+        default=None,
+        help="Benchmark settings to run. If not specified, runs all 4 settings. Can specify multiple.",
+    )
     parser.add_argument("--disable-weighted-sampler", action="store_true")
     parser.add_argument("--enable-class-weights", action="store_true")
     parser.add_argument("--cpu-only", action="store_true")

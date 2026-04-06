@@ -28,8 +28,11 @@ def run_benchmark(
     """
     run_results = []
     manifest_rows = []
+    
+    # Use specified settings or all settings
+    settings_to_run = cfg.benchmark_settings if cfg.benchmark_settings else ALL_SETTINGS
 
-    for setting_name in ALL_SETTINGS:
+    for setting_name in settings_to_run:
         setting = release.settings[setting_name]
         train_df = setting["train"].copy()
         val_df = setting["val"].copy()
