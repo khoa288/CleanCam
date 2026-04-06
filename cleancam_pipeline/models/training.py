@@ -151,13 +151,15 @@ def train_one_setting(
     val_loader = make_eval_loader(val_df, eval_tf, cfg)
     test_loader = make_eval_loader(test_df, eval_tf, cfg)
 
+    # Extract ordinal method for this run
+    ordinal_method = cfg.ordinal_methods[0] if cfg.ordinal_methods else None
+
     print_run_header(
         model_name, setting_name, seed, device, train_df, val_df, test_df, cfg
     )
     run = maybe_init_wandb(cfg, model_name, setting_name, seed, ordinal_method, output_dir)
 
     # Build model and training components
-    ordinal_method = cfg.ordinal_methods[0] if cfg.ordinal_methods else None
     model = build_model(model_name, ordinal_method=ordinal_method)
     
     # Multi-GPU support using DataParallel
