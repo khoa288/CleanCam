@@ -1,1053 +1,344 @@
-# CleanCam Dataset Paper Pipeline
+# CleanCam: A Dataset and Benchmark for Camera Lens Cleanliness Classification
 
-A production-ready, modular pipeline for CleanCam dataset characterization, integrity auditing, annotation agreement analysis, synthetic data analysis, and CNN benchmarking.
+## Overview
 
----
-
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Usage](#usage)
-  - [Command Line](#command-line)
-  - [Python Library](#python-library)
-- [Architecture](#architecture)
-- [Configuration](#configuration)
-- [Outputs](#outputs)
-- [Testing](#testing)
-- [API Reference](#api-reference)
-- [Examples](#examples)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
+This repository contains the official analysis pipeline for the CleanCam dataset paper. CleanCam is a real-world dataset for ordinal classification of camera lens cleanliness, comprising field-captured images annotated across five severity levels (Label 1: clean to Label 5: severely dirty). The pipeline supports dataset characterization, integrity auditing, annotation agreement analysis, synthetic data analysis, and CNN benchmarking with standard and ordinal regression methods.
 
 ---
 
-## 🎯 Overview
+## Dataset
 
-This pipeline provides comprehensive tools for analyzing the CleanCam dataset and benchmarking CNN models for camera lens cleanliness classification (5-class ordinal problem: labels 1-5 from clean to severely dirty).
+### Structure
 
-### What It Does
+The dataset is organized into real and synthetic subsets with official train/validation/test splits partitioned at the `capture_id` level to prevent leakage.
 
-1. **Dataset Characterization** - Statistics, distributions, visualizations
-2. **Integrity Auditing** - Split validation, duplicate detection, leakage checks
-3. **Annotation Agreement** - Inter-annotator metrics (Cohen's kappa, etc.)
-4. **Synthetic Analysis** - Parent-child comparisons, low-level statistics
-5. **CNN Benchmarking** - Train and evaluate ResNet18, MobileNetV2, EfficientNet-B0
+```
+CleanCam_release/
+├── images/
+│   ├── real/                        # Field-captured images
+│   └── synthetic/                   # Seamless Ultra-Blur synthetic images
+├── metadata/
+│   ├── metadata.csv                 # Master metadata (real + synthetic)
+│   ├── metadata_real.csv
+│   ├── metadata_synthetic.csv
+│   ├── dirt_assets_manifest.csv
+│   ├── split_summary.csv
+│   └── build_summary.json
+└── splits/
+    └── official/
+        ├── train_real_only.csv
+        ├── train_real_plus_synthetic.csv
+        ├── val_real_only.csv
+        ├── val_real_plus_synthetic.csv
+        ├── test_real_only.csv
+        └── test_real_plus_synthetic.csv
+```
+
+### Label Taxonomy
+
+| Label | Description |
+|-------|-------------|
+| 1 | Clean |
+| 2 | Slightly dirty |
+| 3 | Moderately dirty |
+| 4 | Dirty |
+| 5 | Severely dirty |
+
+### Synthetic Data
+
+Synthetic images are generated via the Seamless Ultra-Blur pipeline. Each synthetic image inherits the split membership of its real parent image, ensuring no cross-split leakage. Synthetic images are generated exclusively for labels 3, 4, and 5 to augment underrepresented severity classes.
+
+| Split | Synthetic Count |
+|-------|----------------|
+| Train | 2,800 |
+| Val   | 400 |
+| Test  | 400 |
+
+### Benchmark Settings
+
+Four official train/evaluation settings are defined:
+
+| Setting | Train Set | Evaluation Set |
+|---------|-----------|----------------|
+| `train_real_only__eval_real_only` | Real only | Real only |
+| `train_real_plus_synthetic__eval_real_only` | Real + Synthetic | Real only |
+| `train_real_only__eval_real_plus_synthetic` | Real only | Real + Synthetic |
+| `train_real_plus_synthetic__eval_real_plus_synthetic` | Real + Synthetic | Real + Synthetic |
+
+The first two settings constitute the **primary benchmark**. The latter two assess robustness to synthetic data at evaluation time.
 
 ---
 
-## ✨ Features
+## Pipeline
 
-### Dataset Analysis
-- Label distribution analysis across subsets
-- Split composition tables (train/val/test)
-- Grouping by camera, session, day, capture
-- Example image grids
-- Synthetic source-to-target analysis
+### Stages
 
-### Integrity Audits
-- Split disjointness verification
-- Exact duplicate detection (SHA256)
-- Near-duplicate detection (perceptual hashing)
-- Parent leakage checks
-- Asset split consistency
+The pipeline is organized into five stages:
 
-### Annotation Agreement
-- Pairwise Cohen's kappa
-- Quadratic weighted kappa
-- Raw agreement rates
-- Confusion matrices
-- Image-level disagreement analysis
+1. **Dataset Characterization** — Label distributions, split compositions, example image grids, and grouping statistics by camera, session, and capture.
+2. **Integrity Auditing** — Split disjointness verification, exact duplicate detection (SHA-256), near-duplicate detection (perceptual hashing), and parent leakage checks.
+3. **Annotation Agreement** — Pairwise Cohen's kappa, quadratic weighted kappa, raw agreement rates, and image-level disagreement analysis.
+4. **Synthetic Data Analysis** — Low-level statistics (sharpness, contrast, entropy), real vs. synthetic comparisons, parent-child delta analysis, and PCA visualization.
+5. **CNN Benchmarking** — Training and evaluation of CNN classifiers with support for standard cross-entropy and ordinal regression losses (CORAL, CORN).
 
-### Synthetic Data Analysis
-- Low-level statistics (sharpness, contrast, entropy)
-- Real vs synthetic comparisons
-- Parent-child delta analysis
-- PCA visualization
-- Parameter distribution analysis
+### Package Structure
 
-### CNN Benchmarking
-- Multiple architectures (ResNet18, MobileNetV2, EfficientNet-B0)
-- Ordinal regression methods (CORAL, CORN) for ordinal classification
-- Multiple seeds for statistical significance
-- Four benchmark settings (primary + robustness)
-- Comprehensive metrics (accuracy, F1, kappa, MAE, within-1)
-- Per-class and binary metrics
-- Confusion matrices
-- Weights & Biases integration
+```
+cleancam_pipeline/
+├── core/               # Configuration, constants, data loading
+├── data/               # PyTorch Dataset, transforms, DataLoaders
+├── models/             # Model building, training, evaluation, aggregation
+│   ├── builder.py
+│   ├── training.py
+│   ├── evaluation.py
+│   ├── aggregation.py
+│   └── ordinal.py      # CORAL and CORN ordinal regression
+├── analysis/           # Characterization, integrity, annotation, synthetic
+├── visualization/      # Plots and confusion matrices
+├── orchestrators/      # Stage runners
+└── utils/              # I/O, image processing, metrics, seeding
+```
 
 ---
 
-## 📦 Installation
+## Installation
 
 ### Requirements
 
 - Python 3.8+
 - PyTorch 1.10+
-- CUDA (optional, for GPU training)
+- CUDA (optional, recommended for benchmarking)
 
-### Install Dependencies
+### Dependencies
 
 ```bash
-# Clone repository
-git clone <repository-url>
-cd cleancam-pipeline
-
-# Install dependencies
 pip install -r requirements.txt
 ```
 
-### Verify Installation
-
-```bash
-# Check CLI
-python cleancam_pipeline_complete.py --help
-```
+Key dependencies include `torch`, `torchvision`, `scikit-learn`, `pandas`, `numpy`, `opencv-python`, `coral-pytorch`, and optionally `wandb`.
 
 ---
 
-## 🚀 Quick Start
+## Usage
 
-### 1. Run Full Pipeline
-
-```bash
-python cleancam_pipeline_complete.py \
-    --release-root /path/to/CleanCam_release \
-    --output-root ./output \
-    --run-all
-```
-
-### 2. Run Specific Stages
+### Command-Line Interface
 
 ```bash
-# Only characterization
-python cleancam_pipeline_complete.py \
-    --release-root /path/to/CleanCam_release \
-    --output-root ./output \
-    --run-characterization
-
-# Only benchmark with custom settings
-python cleancam_pipeline_complete.py \
-    --release-root /path/to/CleanCam_release \
-    --output-root ./output \
-    --run-benchmark \
-    --models resnet18 mobilenet_v2 \
-    --epochs 30 \
-    --batch-size 64 \
-    --seeds 42 43 44
+python cleancam_pipeline.py \
+    --release-root <path_to_CleanCam_release> \
+    --output-root  <path_to_output_directory> \
+    [STAGE FLAGS] \
+    [OPTIONS]
 ```
 
-### 3. Use as Python Library
+#### Stage Flags
 
-```python
-from pathlib import Path
-from cleancam_pipeline import BenchmarkConfig, CleanCamRelease
-from cleancam_pipeline.orchestrators import run_benchmark
-from cleancam_pipeline.utils import OutputManager
-
-# Load data
-release = CleanCamRelease(Path("CleanCam_release"))
-
-# Configure
-config = BenchmarkConfig(
-    epochs=30,
-    batch_size=32,
-    learning_rate=1e-3,
-    models=("resnet18",),
-    seeds=(42,)
-)
-
-# Run benchmark
-output = OutputManager(Path("output"))
-run_benchmark(release, output, config)
-```
-
----
-
-## 📖 Usage
-
-### Command Line Interface
-
-#### Basic Options
-
-```bash
-python cleancam_pipeline_complete.py \
-    --release-root PATH          # Path to CleanCam_release directory (required)
-    --output-root PATH           # Path to output directory (required)
-    --annotation-csv PATH        # Optional annotation CSV for agreement analysis
-```
-
-#### Stage Selection
-
-```bash
---run-all                        # Run all stages
---run-characterization           # Dataset characterization
---run-integrity                  # Integrity audits
---run-annotation                 # Annotation agreement (requires --annotation-csv)
---run-synthetic-analysis         # Synthetic data analysis
---run-benchmark                  # CNN benchmarking
-```
-
-#### Integrity Options
-
-```bash
---run-near-duplicate-audit       # Enable near-duplicate detection
---near-duplicate-cap 1000        # Max images to check per split
-```
-
-#### Synthetic Analysis Options
-
-```bash
---synthetic-analysis-cap 2000    # Max images to analyze
-```
+| Flag | Description |
+|------|-------------|
+| `--run-all` | Run all stages |
+| `--run-characterization` | Dataset characterization |
+| `--run-integrity` | Integrity auditing |
+| `--run-annotation` | Annotation agreement (requires `--annotation-csv`) |
+| `--run-synthetic-analysis` | Synthetic data analysis |
+| `--run-benchmark` | CNN benchmarking |
 
 #### Benchmark Options
 
-```bash
-# Model selection
---models resnet18 mobilenet_v2 efficientnet_b0
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--models` | `mobilenet_v2 resnet18 efficientnet_b0` | Model architectures to evaluate |
+| `--seeds` | `42 43 44` | Random seeds for multiple runs |
+| `--epochs` | `30` | Training epochs |
+| `--batch-size` | `32` | Batch size |
+| `--learning-rate` | `1e-3` | Learning rate |
+| `--weight-decay` | `1e-4` | Weight decay |
+| `--patience` | `7` | Early stopping patience |
+| `--image-size` | `224` | Input image resolution |
+| `--num-workers` | `4` | DataLoader worker processes |
+| `--ordinal-methods` | *(none)* | Ordinal loss: `coral`, `corn`, or both |
+| `--benchmark-settings` | *(all 4)* | Subset of benchmark settings to run |
+| `--disable-weighted-sampler` | — | Disable class-balanced sampling |
+| `--enable-class-weights` | — | Apply class weights to cross-entropy loss |
+| `--cpu-only` | — | Force CPU execution |
+| `--single-gpu` | — | Disable multi-GPU (DataParallel) |
+| `--no-amp` | — | Disable automatic mixed precision |
+| `--no-save-checkpoints` | — | Do not save model checkpoints |
+| `--use-wandb` | — | Enable Weights & Biases logging |
+| `--wandb-project` | `cleancam-dataset-paper` | W&B project name |
+| `--wandb-entity` | *(none)* | W&B entity |
+| `--wandb-mode` | `online` | W&B mode: `online`, `offline`, `disabled` |
 
-# Training configuration
---epochs 30                      # Number of training epochs
---batch-size 32                  # Batch size
---learning-rate 0.001            # Learning rate
---weight-decay 0.0001            # Weight decay
---patience 7                     # Early stopping patience
---seeds 42 43 44                 # Random seeds for multiple runs
---ordinal-methods coral corn     # Ordinal regression methods (can specify multiple)
+### Example Commands
 
-# Data loading
---num-workers 4                  # DataLoader workers
---image-size 224                 # Input image size
---prefetch-factor 4              # Prefetch factor
-
-# Training options
---disable-weighted-sampler       # Disable weighted sampling
---enable-class-weights           # Use class weights in loss
---cpu-only                       # Force CPU training
---single-gpu                     # Disable multi-GPU (use only 1 GPU)
---no-save-checkpoints            # Don't save model checkpoints
---no-amp                         # Disable mixed precision
---no-persistent-workers          # Disable persistent workers
-
-# Logging
---log-interval 25                # Log every N batches
---use-wandb                      # Enable Weights & Biases
---wandb-project PROJECT          # W&B project name
---wandb-entity ENTITY            # W&B entity
---wandb-mode online              # W&B mode (online/offline/disabled)
---wandb-run-prefix PREFIX        # W&B run name prefix
-```
-
-### Python Library
-
-#### Load and Explore Data
-
-```python
-from cleancam_pipeline import CleanCamRelease
-from pathlib import Path
-
-# Load release
-release = CleanCamRelease(Path("CleanCam_release"))
-
-# Access metadata
-print(f"Total images: {len(release.metadata)}")
-print(f"Real images: {len(release.metadata_real)}")
-print(f"Synthetic images: {len(release.metadata_synth)}")
-
-# Access splits
-train = release.get_split("train_real_only")
-print(f"Training samples: {len(train)}")
-
-# Access benchmark settings
-setting = release.get_setting("train_real_only__eval_real_only")
-print(f"Train: {len(setting['train'])}")
-print(f"Val: {len(setting['val'])}")
-print(f"Test: {len(setting['test'])}")
-```
-
-#### Custom Training
-
-```python
-from cleancam_pipeline import BenchmarkConfig
-from cleancam_pipeline.data import build_transforms, make_train_loader
-from cleancam_pipeline.models import build_model, evaluate_model
-import torch
-
-# Configure
-config = BenchmarkConfig(batch_size=64, epochs=10)
-
-# Build data pipeline
-train_tf, eval_tf = build_transforms(config.image_size)
-train_loader = make_train_loader(train_df, train_tf, config)
-test_loader = make_eval_loader(test_df, eval_tf, config)
-
-# Build model
-model = build_model("resnet18")
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = model.to(device)
-
-# Evaluate
-metrics = evaluate_model(model, test_loader, device)
-print(f"Accuracy: {metrics['accuracy']:.4f}")
-print(f"Macro-F1: {metrics['macro_f1']:.4f}")
-```
-
-#### Run Individual Analyses
-
-```python
-from cleancam_pipeline.orchestrators import (
-    run_characterization,
-    run_integrity,
-    run_synthetic_analysis
-)
-from cleancam_pipeline.utils import OutputManager
-
-output = OutputManager(Path("output"))
-
-# Run characterization
-run_characterization(release, output)
-
-# Run integrity audit
-run_integrity(release, output, 
-              run_near_duplicate_audit=True, 
-              near_duplicate_cap=1000)
-
-# Run synthetic analysis
-run_synthetic_analysis(release, output, cap=2000)
-```
-
----
-
-## 🏗️ Architecture
-
-### Project Structure
-
-```
-cleancam-pipeline/
-├── cleancam_pipeline/              # Main package
-│   ├── core/                       # Core abstractions
-│   │   ├── constants.py           # Labels, mappings, settings
-│   │   ├── config.py              # Configuration with validation
-│   │   └── release.py             # Data loading
-│   ├── data/                       # Data pipeline
-│   │   ├── dataset.py             # PyTorch Dataset
-│   │   ├── transforms.py          # Image preprocessing
-│   │   └── loaders.py             # DataLoader creation
-│   ├── models/                     # Model components
-│   │   ├── builder.py             # Model architectures
-│   │   ├── evaluation.py          # Metrics computation
-│   │   ├── training.py            # Training loop
-│   │   └── aggregation.py         # Result aggregation
-│   ├── analysis/                   # Analysis functions
-│   │   ├── characterization.py    # Dataset statistics
-│   │   ├── integrity.py           # Audit functions
-│   │   ├── annotation.py          # Agreement metrics
-│   │   └── synthetic.py           # Synthetic analysis
-│   ├── visualization/              # Plotting
-│   │   ├── plots.py               # All plotting functions
-│   │   └── confusion_matrix.py    # CM visualization
-│   ├── orchestrators/              # Pipeline runners
-│   │   ├── characterization_runner.py
-│   │   ├── integrity_runner.py
-│   │   ├── annotation_runner.py
-│   │   ├── synthetic_runner.py
-│   │   └── benchmark_runner.py
-│   └── utils/                      # Utilities
-│       ├── io.py                  # File I/O
-│       ├── image.py               # Image processing
-│       ├── metrics.py             # Custom metrics
-│       └── seed.py                # Reproducibility
-├── tests/                          # Test suite
-├── cleancam_pipeline_complete.py  # Main script
-├── requirements.txt                # Dependencies
-└── README.md                       # This file
-```
-
-### Module Responsibilities
-
-- **core**: Constants, configuration, data loading
-- **data**: PyTorch datasets, transforms, loaders
-- **models**: Model building, training, evaluation, aggregation
-- **analysis**: Dataset characterization, integrity, annotation, synthetic
-- **visualization**: All plotting and visualization functions
-- **orchestrators**: High-level pipeline runners
-- **utils**: Shared utilities (I/O, image processing, metrics)
-
----
-
-## ⚙️ Configuration
-
-### BenchmarkConfig
-
-All training parameters are configurable via `BenchmarkConfig`:
-
-```python
-from cleancam_pipeline import BenchmarkConfig
-
-config = BenchmarkConfig(
-    # Image and batch settings
-    image_size=224,
-    batch_size=32,
-    num_workers=4,
-    
-    # Training settings
-    epochs=30,
-    patience=7,
-    learning_rate=1e-3,
-    weight_decay=1e-4,
-    
-    # Experiment settings
-    seeds=(42, 43, 44),
-    models=("mobilenet_v2", "resnet18", "efficientnet_b0"),
-    ordinal_methods=(None,),  # Tuple of None, "coral", or "corn"
-    
-    # Sampling and weighting
-    use_weighted_sampler=True,
-    use_class_weights=False,
-    
-    # Hardware and optimization
-    train_on_gpu_if_available=True,
-    use_amp=True,
-    persistent_workers=True,
-    prefetch_factor=4,
-    
-    # Checkpointing and logging
-    save_best_checkpoints=True,
-    log_interval=25,
-    
-    # Weights & Biases
-    use_wandb=False,
-    wandb_project="cleancam-dataset-paper",
-    wandb_entity=None,
-    wandb_mode="online",
-    wandb_run_prefix="cleancam",
-)
-```
-
-### Validation
-
-Configuration is validated on creation:
-
-```python
-# This will raise ValueError
-config = BenchmarkConfig(batch_size=-1)  # batch_size must be positive
-config = BenchmarkConfig(epochs=0)       # epochs must be positive
-config = BenchmarkConfig(models=())      # models cannot be empty
-```
-
-### Benchmark Settings
-
-Four benchmark settings are supported:
-
-1. **train_real_only → eval_real_only** (Primary)
-   - Train on real images only
-   - Evaluate on real images only
-
-2. **train_real_plus_synthetic → eval_real_only** (Primary)
-   - Train on real + synthetic images
-   - Evaluate on real images only
-
-3. **train_real_only → eval_real_plus_synthetic** (Robustness)
-   - Train on real images only
-   - Evaluate on real + synthetic images
-
-4. **train_real_plus_synthetic → eval_real_plus_synthetic** (Robustness)
-   - Train on real + synthetic images
-   - Evaluate on real + synthetic images
-
-### Ordinal Regression Methods
-
-The CleanCam classification task is inherently ordinal (labels 1-5 represent increasing dirt levels). Standard cross-entropy loss treats classes as independent, ignoring this ordering. Ordinal regression methods leverage the ordinal structure for better performance.
-
-#### CORAL (Consistent Rank Logits)
-
-CORAL reformulates ordinal regression as a series of binary classification tasks with weight sharing. For K classes, it predicts K-1 cumulative probabilities: P(Y > k) for k = 0, ..., K-2.
-
-**Usage:**
+**Run full pipeline:**
 ```bash
 python cleancam_pipeline.py \
-    --release-root /path/to/CleanCam_release \
-    --output-root ./output \
-    --run-benchmark \
-    --ordinal-methods coral \
-    --models resnet18 mobilenet_v2 efficientnet_b0
+    --release-root /data/CleanCam_release \
+    --output-root  ./output \
+    --run-all
 ```
 
-**Benefits:**
-- Enforces rank consistency in predictions
-- Better MAE and weighted kappa scores
-- More robust to label noise
-
-**Reference:** [Cao et al. 2020 - Rank Consistent Ordinal Regression](https://arxiv.org/abs/1901.07884)
-
-#### CORN (Conditional Ordinal Regression for Neural networks)
-
-CORN uses conditional probabilities P(Y > k | Y > k-1) to model the ordinal structure. This approach is more flexible than CORAL and often achieves better performance.
-
-**Usage:**
+**Run primary benchmark settings only:**
 ```bash
 python cleancam_pipeline.py \
-    --release-root /path/to/CleanCam_release \
-    --output-root ./output \
+    --release-root /data/CleanCam_release \
+    --output-root  ./output \
     --run-benchmark \
-    --ordinal-methods corn \
-    --models resnet18 mobilenet_v2 efficientnet_b0
+    --models mobilenet_v2 resnet18 efficientnet_b0 \
+    --seeds 42 43 44 \
+    --benchmark-settings \
+        train_real_only__eval_real_only \
+        train_real_plus_synthetic__eval_real_only
 ```
 
-**Benefits:**
-- More flexible than CORAL
-- Better captures ordinal relationships
-- Often achieves best MAE and kappa scores
-
-**Reference:** [Shi et al. 2021 - CORN](https://arxiv.org/abs/2111.08851)
-
-#### Compare Multiple Methods
-
-You can test multiple ordinal methods in a single run:
-
+**Run with ordinal regression methods:**
 ```bash
 python cleancam_pipeline.py \
-    --release-root /path/to/CleanCam_release \
-    --output-root ./output \
+    --release-root /data/CleanCam_release \
+    --output-root  ./output \
     --run-benchmark \
+    --models mobilenet_v2 resnet18 efficientnet_b0 \
     --ordinal-methods coral corn \
-    --models resnet18 mobilenet_v2 efficientnet_b0
+    --seeds 42 43 44
 ```
-
-This will train each model with both CORAL and CORN, allowing direct comparison.
-
-#### Standard Cross-Entropy (Default)
-
-When `--ordinal-methods` is not specified, standard cross-entropy loss is used. This treats the problem as nominal classification.
-
-**Usage:**
-```bash
-python cleancam_pipeline.py \
-    --release-root /path/to/CleanCam_release \
-    --output-root ./output \
-    --run-benchmark \
-    --models resnet18 mobilenet_v2 efficientnet_b0
-```
-
-#### Comparison
-
-| Method | Loss Type | Ordinal Structure | Best For |
-|--------|-----------|-------------------|----------|
-| Cross-Entropy | Nominal | No | General classification |
-| CORAL | Ordinal | Yes (cumulative) | Balanced performance |
-| CORN | Ordinal | Yes (conditional) | Best ordinal metrics |
-
-**Recommendation:** For the CleanCam ordinal task, try CORN first for best MAE and weighted kappa scores.
 
 ---
 
-## 📤 Outputs
+## Models
 
-The pipeline generates organized outputs:
+### Architectures
+
+Three ImageNet-pretrained CNN architectures are evaluated:
+
+| Model | Parameters | Notes |
+|-------|-----------|-------|
+| MobileNetV2 | ~3.4M | Lightweight, mobile-oriented |
+| ResNet-18 | ~11.7M | Standard residual network |
+| EfficientNet-B0 | ~5.3M | Compound-scaled efficient network |
+
+All models are fine-tuned end-to-end with the final classification head replaced for the 5-class ordinal task.
+
+### Loss Functions
+
+| Method | Flag | Description |
+|--------|------|-------------|
+| Cross-Entropy | *(default)* | Standard nominal classification loss |
+| CORAL | `--ordinal-methods coral` | Consistent Rank Logits; binary cumulative loss with weight sharing |
+| CORN | `--ordinal-methods corn` | Conditional Ordinal Regression; conditional probability chain |
+
+**CORAL** replaces the final linear layer with a `CoralLayer` (from `coral-pytorch`) and optimizes binary cross-entropy over cumulative rank thresholds.
+
+**CORN** replaces the final linear layer with a standard `nn.Linear(in_features, num_classes - 1)` and optimizes the conditional ordinal loss from `coral-pytorch`.
+
+Both ordinal methods output `num_classes - 1` logits and convert predictions to class labels via threshold-based decoding.
+
+### Training Protocol
+
+- Optimizer: AdamW
+- Scheduler: ReduceLROnPlateau (factor=0.5, patience=2)
+- Early stopping: based on validation macro-F1 (patience configurable)
+- Sampling: class-balanced weighted random sampling (default)
+- Mixed precision: AMP enabled by default on CUDA
+- Multi-GPU: DataParallel enabled by default when multiple GPUs are available
+- Reproducibility: deterministic algorithms enforced per seed (`torch.use_deterministic_algorithms(True)`, `cudnn.deterministic=True`, `cudnn.benchmark=False`)
+
+---
+
+## Evaluation Metrics
+
+The following metrics are reported per model, setting, and seed, then aggregated (mean ± std) across seeds:
+
+| Metric | Description |
+|--------|-------------|
+| Accuracy | Overall classification accuracy |
+| Macro-F1 | Unweighted mean F1 across all 5 classes |
+| Quadratic Weighted Kappa | Agreement metric penalizing ordinal distance |
+| MAE | Mean absolute error between predicted and true labels |
+| Within-1 Accuracy | Fraction of predictions within ±1 label of ground truth |
+| Per-class Precision / Recall / F1 | Per-label breakdown |
+| Binary Precision / Recall / F1 | Clean (L1) vs. dirty (L2–L5) |
+| Binary AUROC / AUPRC | Binary discrimination metrics |
+
+---
+
+## Outputs
+
+All outputs are written to the specified `--output-root` directory:
 
 ```
 output/
-├── tables/                         # CSV and LaTeX tables
+├── tables/
+│   ├── benchmark_summary_main.csv / .tex
+│   ├── benchmark_summary_per_class.csv
+│   ├── benchmark_summary_binary.csv / .tex
+│   ├── benchmark_improvement_summary.csv / .tex
+│   ├── benchmark_setting_manifest.csv
 │   ├── release_composition.csv
-│   ├── official_split_composition.csv
 │   ├── integrity_audit.csv
-│   ├── annotation_pairs.csv
-│   ├── synthetic_parameter_summary.csv
-│   ├── benchmark_summary_main.csv
 │   └── ...
-├── figures/                        # Plots and visualizations
-│   ├── label_distribution_overall.png
-│   ├── example_grid_real.png
-│   ├── synthetic_vs_real_severe_histograms.png
+├── figures/
 │   ├── benchmark_macro_f1.png
-│   ├── confusion_mean_resnet18_*.png
+│   ├── benchmark_weighted_kappa.png
+│   ├── benchmark_mae.png
+│   ├── confusion_mean_<model>_<setting>.png
+│   ├── label_distribution_overall.png
 │   └── ...
-├── summaries/                      # JSON summaries
+├── summaries/
+│   ├── benchmark_summary.json
 │   ├── characterization_summary.json
 │   ├── integrity_summary.json
-│   ├── annotation_summary.json
-│   ├── synthetic_summary.json
-│   ├── benchmark_summary.json
-│   └── environment_summary.json
-├── logs/                           # Training logs
-└── benchmark/                      # Model outputs
-    ├── resnet18/
-    │   ├── train_real_only__eval_real_only/
-    │   │   └── seed_42/
-    │   │       ├── best_*.pt                    # Model checkpoint
-    │   │       ├── train_log_*.csv              # Training log
-    │   │       ├── test_predictions_*.csv       # Predictions
-    │   │       └── confusion_matrix_test_norm.png
-    │   └── ...
-    └── ...
-```
-
-### Output Files
-
-#### Tables (CSV + LaTeX)
-- Release and split composition
-- Integrity audit results
-- Annotation agreement metrics
-- Synthetic parameter summaries
-- Benchmark results (main, per-class, binary)
-
-#### Figures (PNG, 300 DPI)
-- Label distributions
-- Example image grids
-- Real vs synthetic comparisons
-- PCA visualizations
-- Benchmark comparisons
-- Confusion matrices
-
-#### Summaries (JSON)
-- Structured data for programmatic access
-- Environment information
-- Complete results
-
-#### Benchmark Outputs
-- Model checkpoints (best epoch)
-- Training logs (per epoch)
-- Test predictions with probabilities
-- Confusion matrices
-
----
-
-## 🧪 Testing
-
-### Run Tests
-
-```bash
-# Run all tests
-pytest tests/ -v
-
-# Run with coverage
-pytest --cov=cleancam_pipeline tests/
-
-# Run specific test file
-pytest tests/test_core.py -v
-
-# Run specific test
-pytest tests/test_core.py::TestBenchmarkConfig::test_invalid_batch_size -v
+│   ├── environment_summary.json
+│   └── ...
+└── benchmark/
+    └── <model>[_<ordinal_method>]/
+        └── <setting>/
+            └── seed_<N>/
+                ├── best_<model>_<setting>_seed<N>.pt
+                ├── train_log_<model>_<setting>_seed<N>.csv
+                ├── test_predictions_<model>_<setting>_seed<N>.csv
+                └── confusion_matrix_test_norm.png
 ```
 
 ---
 
-## 📚 API Reference
+## Reproducibility
 
-### Core
+All experiments are fully reproducible given the same seed. The following measures are applied:
 
-#### CleanCamRelease
-```python
-release = CleanCamRelease(release_root: Path)
-release.get_split(split_name: str) -> pd.DataFrame
-release.get_setting(setting_name: str) -> Dict
-```
+- `random.seed(seed)`
+- `numpy.random.seed(seed)`
+- `torch.manual_seed(seed)` and `torch.cuda.manual_seed_all(seed)`
+- `torch.use_deterministic_algorithms(True)`
+- `torch.backends.cudnn.deterministic = True`
+- `torch.backends.cudnn.benchmark = False`
 
-#### BenchmarkConfig
-```python
-config = BenchmarkConfig(
-    epochs=30,
-    batch_size=32,
-    # ... see Configuration section
-)
-config = BenchmarkConfig.from_args(args: argparse.Namespace)
-```
-
-### Data
-
-#### Transforms
-```python
-train_tf, eval_tf = build_transforms(image_size: int)
-```
-
-#### Loaders
-```python
-train_loader = make_train_loader(df, transform, config)
-eval_loader = make_eval_loader(df, transform, config)
-```
-
-### Models
-
-#### Building
-```python
-model = build_model(model_name: str, num_classes: int = 5, ordinal_method: str = None)
-# Supported models: "resnet18", "mobilenet_v2", "efficientnet_b0"
-# Supported ordinal methods: None, "coral", "corn"
-
-# Standard classification
-model = build_model("resnet18")
-
-# CORAL ordinal regression
-model = build_model("resnet18", ordinal_method="coral")
-
-# CORN ordinal regression
-model = build_model("mobilenet_v2", ordinal_method="corn")
-```
-
-#### Training
-```python
-result = train_one_setting(
-    train_df, val_df, test_df,
-    model_name, setting_name, seed,
-    cfg, output_dir
-)
-```
-
-#### Evaluation
-```python
-metrics = evaluate_model(model, loader, device, ordinal_method=None)
-# Returns: accuracy, macro_f1, weighted_kappa, mae, within1,
-#          per_class_rows, confusion_matrix, binary_metrics, etc.
-
-# For ordinal models, pass the ordinal_method
-metrics = evaluate_model(model, loader, device, ordinal_method="coral")
-```
-
-#### Aggregation
-```python
-main_df, per_class_df, binary_df, pairwise_df = \
-    aggregate_benchmark_results(results)
-```
-
-### Orchestrators
-
-```python
-from cleancam_pipeline.orchestrators import (
-    run_characterization,
-    run_integrity,
-    run_annotation,
-    run_synthetic_analysis,
-    run_benchmark
-)
-
-run_characterization(release, output_manager)
-run_integrity(release, output_manager, run_near_dup, cap)
-run_annotation(annotation_csv_path, output_manager)
-run_synthetic_analysis(release, output_manager, cap)
-run_benchmark(release, output_manager, config)
-```
-
-### Utils
-
-```python
-from cleancam_pipeline.utils import (
-    OutputManager,
-    save_csv, save_json, save_table,
-    compute_phash, compute_sha256,
-    count_by_label, compute_within_one_accuracy,
-    set_seed
-)
-```
+Note: DataParallel across multiple GPUs may introduce minor floating-point non-determinism. Use `--single-gpu` for strict reproducibility.
 
 ---
 
-## 💡 Examples
+## Experiment Tracking
 
-### Example 1: Quick Benchmark
+Weights & Biases integration is available via `--use-wandb`. Each run is logged with a unique name encoding the model, ordinal method, benchmark setting, and seed:
 
-```python
-from pathlib import Path
-from cleancam_pipeline import BenchmarkConfig, CleanCamRelease
-from cleancam_pipeline.orchestrators import run_benchmark
-from cleancam_pipeline.utils import OutputManager
-
-# Setup
-release = CleanCamRelease(Path("CleanCam_release"))
-output = OutputManager(Path("output"))
-
-# Quick config
-config = BenchmarkConfig(
-    models=("resnet18",),
-    seeds=(42,),
-    epochs=10,
-    batch_size=64
-)
-
-# Run
-run_benchmark(release, output, config)
+```
+<prefix>-<model>[-<ordinal_method>]-<setting>-seed<N>
 ```
 
-### Example 2: Custom Analysis
-
-```python
-from cleancam_pipeline.analysis import extract_low_level_stats
-from pathlib import Path
-import pandas as pd
-
-# Analyze specific images
-results = []
-for image_path in image_paths:
-    stats = extract_low_level_stats(Path(image_path))
-    results.append(stats)
-
-df = pd.DataFrame(results)
-print(df.describe())
-```
-
-### Example 3: Evaluate Existing Model
-
-```python
-import torch
-from cleancam_pipeline.models import build_model, evaluate_model
-from cleancam_pipeline.data import build_transforms, make_eval_loader
-from cleancam_pipeline import BenchmarkConfig
-
-# Load model
-model = build_model("resnet18")
-checkpoint = torch.load("best_model.pt")
-model.load_state_dict(checkpoint)
-
-# Setup evaluation
-config = BenchmarkConfig()
-_, eval_tf = build_transforms(config.image_size)
-test_loader = make_eval_loader(test_df, eval_tf, config)
-
-# Evaluate
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = model.to(device)
-metrics = evaluate_model(model, test_loader, device)
-
-print(f"Accuracy: {metrics['accuracy']:.4f}")
-print(f"Macro-F1: {metrics['macro_f1']:.4f}")
-print(f"Weighted Kappa: {metrics['weighted_kappa']:.4f}")
-print(f"MAE: {metrics['mae']:.4f}")
-print(f"Within-1: {metrics['within1']:.4f}")
-```
-
-### Example 4: Custom Pipeline
-
-```python
-from cleancam_pipeline import CleanCamRelease
-from cleancam_pipeline.analysis import make_release_composition_table
-from cleancam_pipeline.visualization import plot_label_distribution_overall
-from cleancam_pipeline.utils import OutputManager, save_table
-from pathlib import Path
-
-# Load data
-release = CleanCamRelease(Path("CleanCam_release"))
-output = OutputManager(Path("output"))
-
-# Custom analysis
-composition = make_release_composition_table(
-    release.metadata,
-    release.metadata_real,
-    release.metadata_synth
-)
-
-# Save results
-save_table(composition, output.tables_root / "my_composition.csv")
-
-# Create visualization
-plot_label_distribution_overall(
-    release.metadata,
-    release.metadata_real,
-    release.metadata_synth,
-    output.figures_root / "my_distribution.png"
-)
-```
+Runs are grouped by model and setting for easy comparison in the W&B dashboard.
 
 ---
 
-## 🔧 Troubleshooting
+## References
 
-### Common Issues
-
-#### CUDA Out of Memory
-```bash
-# Reduce batch size
---batch-size 16
-
-# Or use CPU
---cpu-only
-```
-
-#### Slow Data Loading
-```bash
-# Increase workers
---num-workers 8
-
-# Adjust prefetch
---prefetch-factor 8
-```
-
-#### Import Errors
-```bash
-# Add to PYTHONPATH
-export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-```
-
-#### Missing Dependencies
-```bash
-# Install all dependencies
-pip install -r requirements.txt
-```
-
-#### Weights & Biases Errors
-```bash
-# Install wandb
-pip install wandb
-
-# Login
-wandb login
-
-# Or disable
---wandb-mode disabled
-```
-
-### Performance Tips
-
-1. **Use GPU** - 10-20x faster training
-2. **Multi-GPU** - Automatically uses all available GPUs with DataParallel
-3. **Enable AMP** - 2x faster with minimal accuracy loss
-4. **Increase workers** - Better CPU utilization
-5. **Use persistent workers** - Avoid respawning overhead
-6. **Batch size** - Larger batches = faster training (if memory allows)
-
-### Multi-GPU Training
-
-The pipeline automatically detects and uses all available GPUs using PyTorch's DataParallel:
-
-```bash
-# Check available GPUs
-python -c "import torch; print(f'GPUs: {torch.cuda.device_count()}')"
-
-# Multi-GPU training (automatic)
-python cleancam_pipeline.py ... --run-benchmark
-
-# Force single GPU
-python cleancam_pipeline.py ... --run-benchmark --single-gpu
-
-# Force CPU
-python cleancam_pipeline.py ... --run-benchmark --cpu-only
-```
-
-**Output example with multi-GPU:**
-```
-[RunStart] model=resnet18 setting=train_real_only__eval_real_only seed=42 device=cuda (multi-GPU) ...
-[MultiGPU] Using 4 GPUs with DataParallel
-```
-
-**Notes:**
-- DataParallel automatically splits batches across GPUs
-- Effective batch size = `batch_size` per GPU
-- Best for 2-4 GPUs (for 4+ GPUs, consider DistributedDataParallel)
-- Requires CUDA-capable GPUs
-
-### Debugging
-
-```python
-# Enable verbose logging
-import logging
-logging.basicConfig(level=logging.DEBUG)
-
-# Check data loading
-from cleancam_pipeline import CleanCamRelease
-release = CleanCamRelease(Path("CleanCam_release"))
-print(f"Loaded {len(release.metadata)} images")
-
-# Test model building
-from cleancam_pipeline.models import build_model
-model = build_model("resnet18")
-print(model)
-
-# Verify configuration
-from cleancam_pipeline import BenchmarkConfig
-config = BenchmarkConfig()
-print(config)
-```
+- **CORAL:** Cao, W., Mirjalili, V., & Raschka, S. (2020). Rank Consistent Ordinal Regression for Neural Networks with Application to Age Estimation. *Pattern Recognition Letters*, 140, 325–331. [arXiv:1901.07884](https://arxiv.org/abs/1901.07884)
+- **CORN:** Shi, X., Cao, W., & Raschka, S. (2021). Deep Neural Networks for Rank-Consistent Ordinal Regression Based On Conditional Probabilities. [arXiv:2111.08851](https://arxiv.org/abs/2111.08851)
+- **coral-pytorch:** [https://raschka-research-group.github.io/coral-pytorch/](https://raschka-research-group.github.io/coral-pytorch/)
+- **MobileNetV2:** Sandler, M. et al. (2018). MobileNetV2: Inverted Residuals and Linear Bottlenecks. *CVPR*.
+- **ResNet:** He, K. et al. (2016). Deep Residual Learning for Image Recognition. *CVPR*.
+- **EfficientNet:** Tan, M. & Le, Q. (2019). EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks. *ICML*.
 
 ---
 
-## 🤝 Contributing
+## License
 
-### Adding New Models
-
-```python
-# In cleancam_pipeline/models/builder.py
-def build_model(model_name: str, num_classes: int = 5) -> nn.Module:
-    if model_name == "your_new_model":
-        model = YourModel(pretrained=True)
-        model.fc = nn.Linear(model.fc.in_features, num_classes)
-        return model
-    # ... existing models
-```
-
-### Adding New Metrics
-
-```python
-# In cleancam_pipeline/utils/metrics.py
-def your_custom_metric(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Compute your custom metric."""
-    return float(...)
-```
-
-### Adding New Analyses
-
-```python
-# Create cleancam_pipeline/analysis/your_analysis.py
-def your_analysis_function(data: pd.DataFrame) -> pd.DataFrame:
-    """Your custom analysis."""
-    return results
-```
-
-### Running Tests
-
-```bash
-# Before submitting
-pytest tests/ -v
-```
-
----
-
-## 📄 License
-
-[Your License Here]
-
----
-
-## 🙏 Acknowledgments
-
-- Original monolithic script authors
-- CleanCam dataset creators
-- PyTorch and torchvision teams
-- scikit-learn contributors
-
----
-
-## 📞 Support
-
-- **Documentation**: See module docstrings
-- **Examples**: Check examples section above
-- **Issues**: [GitHub Issues](your-repo-url/issues)
-- **Tests**: See `tests/` directory for usage examples
-
----
-
-## 📊 Statistics
-
-```
-Code Organization:
-  Modules:        7
-  Files:          27
-  Lines:          ~3,500 (organized)
-  Avg per file:   ~100 lines
-
-Testing:
-  Test files:     4
-  Unit tests:     41
-  Coverage:       ~70%
-```
-
----
-
-**Version**: 2.0.0  
-**Status**: Production Ready  
-**Python**: 3.8+  
-**PyTorch**: 1.10+
-
----
-
-*Built with ❤️ for reproducible research*
+This project is released under the MIT License. See [LICENSE](LICENSE) for details.
