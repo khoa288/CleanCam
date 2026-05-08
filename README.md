@@ -1,226 +1,344 @@
-# CleanCam public reproducibility repo
+# CleanCam: A Dataset and Benchmark for Camera Lens Cleanliness Classification
 
-This repo is the pipeline needed to reproduce the **public** parts of CleanCam:
+## Overview
 
-1. **Synthetic subset regeneration from the public real release**
-2. **Benchmark training and evaluation on the official public split CSVs**
+This repository contains the official analysis pipeline for the CleanCam dataset paper. CleanCam is a real-world dataset for ordinal classification of camera lens cleanliness, comprising field-captured images annotated across five severity levels (Label 1: clean to Label 5: severely dirty). The pipeline supports dataset characterization, integrity auditing, annotation agreement analysis, synthetic data analysis, and CNN benchmarking with standard and ordinal regression methods.
 
-Everything tied to private raw-data curation, filename validation, release rebuilding, copying, and indexing has been removed. That logic was useful for preparing the frozen release, but it is not necessary for a public reproducibility repo.
+---
 
-## Reference links
+## Dataset
 
-- **Dataset DOI:** `10.5281/zenodo.18952474`
-- **Benchmark report (W&B):** `https://api.wandb.ai/links/khoa288-vinuniversity/2lf2n6h8`
+### Structure
 
-## Scope
+The dataset is organized into real and synthetic subsets with official train/validation/test splits partitioned at the `capture_id` level to prevent leakage.
 
-The public CleanCam release contains **18,972 real images** and **3,600 synthetic images**, uses deterministic **capture-disjoint official splits**, and defines four official train/eval settings by crossing two training sets with two evaluation domains. The primary benchmark is evaluated on the **real-only** test split; the mixed-domain splits are supplementary robustness settings. The synthetic subset is a constrained training aid and should not be treated as a replacement for real evaluation.
-
-This repo follows those public design choices:
-
-- synthetic generation is done **within each official split only**
-- synthetic children never cross parent provenance
-- target labels are restricted to **3, 4, 5**
-- `3 -> 3` and `1 -> 5` generation are forbidden
-- benchmark runs use the official split CSVs under `splits/official/`
-- seeds `42 43 44` are supported directly
-
-## Repo layout
-
-```text
-.
-├── README.md
-├── requirements.txt
-├── synthetic/
-│   └── generate_synthetic.py
-└── benchmark/
-    └── run_benchmark.py
 ```
-
-## Expected dataset layout
-
-The scripts assume the downloaded Zenodo release keeps the public structure from the dataset README:
-
-```text
-CleanCam/
+CleanCam_release/
 ├── images/
-│   ├── real/
-│   └── synthetic/
+│   ├── real/                        # Field-captured images
+│   └── synthetic/                   # Seamless Ultra-Blur synthetic images
 ├── metadata/
-│   ├── metadata.csv
+│   ├── metadata.csv                 # Master metadata (real + synthetic)
 │   ├── metadata_real.csv
 │   ├── metadata_synthetic.csv
 │   ├── dirt_assets_manifest.csv
-│   └── split_summary.csv
-├── splits/
-│   └── official/
-│       ├── train_real_only.csv
-│       ├── train_real_plus_synthetic.csv
-│       ├── val_real_only.csv
-│       ├── val_real_plus_synthetic.csv
-│       ├── test_real_only.csv
-│       └── test_real_plus_synthetic.csv
-└── assets/
-    └── dirt_assets/
+│   ├── split_summary.csv
+│   └── build_summary.json
+└── splits/
+    └── official/
+        ├── train_real_only.csv
+        ├── train_real_plus_synthetic.csv
+        ├── val_real_only.csv
+        ├── val_real_plus_synthetic.csv
+        ├── test_real_only.csv
+        └── test_real_plus_synthetic.csv
 ```
+
+### Label Taxonomy
+
+| Label | Description |
+|-------|-------------|
+| 1 | Clean |
+| 2 | Slightly dirty |
+| 3 | Moderately dirty |
+| 4 | Dirty |
+| 5 | Severely dirty |
+
+### Synthetic Data
+
+Synthetic images are generated via the Seamless Ultra-Blur pipeline. Each synthetic image inherits the split membership of its real parent image, ensuring no cross-split leakage. Synthetic images are generated exclusively for labels 3, 4, and 5 to augment underrepresented severity classes.
+
+| Split | Synthetic Count |
+|-------|----------------|
+| Train | 2,800 |
+| Val   | 400 |
+| Test  | 400 |
+
+### Benchmark Settings
+
+Four official train/evaluation settings are defined:
+
+| Setting | Train Set | Evaluation Set |
+|---------|-----------|----------------|
+| `train_real_only__eval_real_only` | Real only | Real only |
+| `train_real_plus_synthetic__eval_real_only` | Real + Synthetic | Real only |
+| `train_real_only__eval_real_plus_synthetic` | Real only | Real + Synthetic |
+| `train_real_plus_synthetic__eval_real_plus_synthetic` | Real + Synthetic | Real + Synthetic |
+
+The first two settings constitute the **primary benchmark**. The latter two assess robustness to synthetic data at evaluation time.
+
+---
+
+## Pipeline
+
+### Stages
+
+The pipeline is organized into five stages:
+
+1. **Dataset Characterization** — Label distributions, split compositions, example image grids, and grouping statistics by camera, session, and capture.
+2. **Integrity Auditing** — Split disjointness verification, exact duplicate detection (SHA-256), near-duplicate detection (perceptual hashing), and parent leakage checks.
+3. **Annotation Agreement** — Pairwise Cohen's kappa, quadratic weighted kappa, raw agreement rates, and image-level disagreement analysis.
+4. **Synthetic Data Analysis** — Low-level statistics (sharpness, contrast, entropy), real vs. synthetic comparisons, parent-child delta analysis, and PCA visualization.
+5. **CNN Benchmarking** — Training and evaluation of CNN classifiers with support for standard cross-entropy and ordinal regression losses (CORAL, CORN).
+
+### Package Structure
+
+```
+cleancam_pipeline/
+├── core/               # Configuration, constants, data loading
+├── data/               # PyTorch Dataset, transforms, DataLoaders
+├── models/             # Model building, training, evaluation, aggregation
+│   ├── builder.py
+│   ├── training.py
+│   ├── evaluation.py
+│   ├── aggregation.py
+│   └── ordinal.py      # CORAL and CORN ordinal regression
+├── analysis/           # Characterization, integrity, annotation, synthetic
+├── visualization/      # Plots and confusion matrices
+├── orchestrators/      # Stage runners
+└── utils/              # I/O, image processing, metrics, seeding
+```
+
+---
 
 ## Installation
 
-Create a fresh environment and install the dependencies:
+### Requirements
+
+- Python 3.8+
+- PyTorch 1.10+
+- CUDA (optional, recommended for benchmarking)
+
+### Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 1) Regenerate the synthetic subset
+Key dependencies include `torch`, `torchvision`, `scikit-learn`, `pandas`, `numpy`, `opencv-python`, `coral-pytorch`, and optionally `wandb`.
 
-This script is the cleaned extraction of the synthetic-generation logic from the original release builder. It operates **only on the public dataset layout**. It does **not** re-index raw private images, rename files, or rebuild the entire release.
+---
 
-### What it reads
+## Usage
 
-- `splits/official/train_real_only.csv`
-- `splits/official/val_real_only.csv`
-- `splits/official/test_real_only.csv`
-- `metadata/dirt_assets_manifest.csv`
-- real images and dirt assets already present inside the public release
-
-### What it writes
-
-```text
-<output-root>/
-├── images/synthetic/label_*/...
-├── metadata/metadata_synthetic.csv
-├── metadata/split_summary.csv
-└── splits/official/
-    ├── train_synthetic_only.csv
-    ├── val_synthetic_only.csv
-    ├── test_synthetic_only.csv
-    ├── train_real_only.csv
-    ├── val_real_only.csv
-    ├── test_real_only.csv
-    ├── train_real_plus_synthetic.csv
-    ├── val_real_plus_synthetic.csv
-    └── test_real_plus_synthetic.csv
-```
-
-### Default synthetic protocol
-
-- total synthetic images: **3600**
-- per-split totals: **train 2800, val 400, test 400**
-- target-label totals: **L3 540, L4 900, L5 2160**
-- target ratios: `3:0.15, 4:0.25, 5:0.60`
-- source policy:
-  - target `3` from labels `1` or `2`
-  - target `4` from labels `2` or `3`
-  - target `5` primarily from label `3`, with label `2` fallback allowed only for training
-- max synthetic children per parent:
-  - train: `2`
-  - val/test: `1`
-
-### Example
+### Command-Line Interface
 
 ```bash
-python synthetic/generate_synthetic.py \
-  --dataset-root /path/to/CleanCam \
-  --output-root /path/to/reproduced_synthetic \
-  --seed 42
+python cleancam_pipeline.py \
+    --release-root <path_to_CleanCam_release> \
+    --output-root  <path_to_output_directory> \
+    [STAGE FLAGS] \
+    [OPTIONS]
 ```
 
-## 2) Run the benchmark
+#### Stage Flags
 
-This script trains and evaluates the public baseline benchmark on the official split CSVs.
+| Flag | Description |
+|------|-------------|
+| `--run-all` | Run all stages |
+| `--run-characterization` | Dataset characterization |
+| `--run-integrity` | Integrity auditing |
+| `--run-annotation` | Annotation agreement (requires `--annotation-csv`) |
+| `--run-synthetic-analysis` | Synthetic data analysis |
+| `--run-benchmark` | CNN benchmarking |
 
-### Public benchmark protocol encoded here
+#### Benchmark Options
 
-- models:
-  - `mobilenet_v2`
-  - `resnet18`
-  - `efficientnet_b0`
-- image size: **224 × 224**
-- batch size: **256**
-- learning rate: **1e-3**
-- weight decay: **1e-4**
-- epochs: up to **30**
-- early stopping patience: **7**
-- class imbalance handled with a **weighted random sampler**
-- reported multiclass metrics:
-  - accuracy
-  - macro-F1
-  - quadratic weighted kappa
-  - MAE in label space
-  - within-1 accuracy
-- reported binary metrics (`Levels 4-5 = Needs cleaning`, `Levels 1-3 = No cleaning yet`):
-  - precision
-  - recall
-  - F1
-  - AUROC
-  - AUPRC
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--models` | `mobilenet_v2 resnet18 efficientnet_b0` | Model architectures to evaluate |
+| `--seeds` | `42 43 44` | Random seeds for multiple runs |
+| `--epochs` | `30` | Training epochs |
+| `--batch-size` | `32` | Batch size |
+| `--learning-rate` | `1e-3` | Learning rate |
+| `--weight-decay` | `1e-4` | Weight decay |
+| `--patience` | `7` | Early stopping patience |
+| `--image-size` | `224` | Input image resolution |
+| `--num-workers` | `4` | DataLoader worker processes |
+| `--ordinal-methods` | *(none)* | Ordinal loss: `coral`, `corn`, or both |
+| `--benchmark-settings` | *(all 4)* | Subset of benchmark settings to run |
+| `--disable-weighted-sampler` | — | Disable class-balanced sampling |
+| `--enable-class-weights` | — | Apply class weights to cross-entropy loss |
+| `--cpu-only` | — | Force CPU execution |
+| `--single-gpu` | — | Disable multi-GPU (DataParallel) |
+| `--no-amp` | — | Disable automatic mixed precision |
+| `--no-save-checkpoints` | — | Do not save model checkpoints |
+| `--use-wandb` | — | Enable Weights & Biases logging |
+| `--wandb-project` | `cleancam-dataset-paper` | W&B project name |
+| `--wandb-entity` | *(none)* | W&B entity |
+| `--wandb-mode` | `online` | W&B mode: `online`, `offline`, `disabled` |
 
-### Reproduce the primary paper tables
+### Example Commands
 
-This command runs the primary benchmark setting reported in the paper: both training sets evaluated on the **real-only** validation/test domain, across seeds `42 43 44`.
-
+**Run full pipeline:**
 ```bash
-python benchmark/run_benchmark.py \
-  --dataset-root /path/to/CleanCam \
-  --output-root /path/to/benchmark_results \
-  --train-splits train_real_only train_real_plus_synthetic \
-  --eval-domains real_only \
-  --models mobilenet_v2 resnet18 efficientnet_b0 \
-  --seeds 42 43 44
+python cleancam_pipeline.py \
+    --release-root /data/CleanCam_release \
+    --output-root  ./output \
+    --run-all
 ```
 
-### Run all four official settings
-
+**Run primary benchmark settings only:**
 ```bash
-python benchmark/run_benchmark.py \
-  --dataset-root /path/to/CleanCam \
-  --output-root /path/to/benchmark_results_all \
-  --train-splits train_real_only train_real_plus_synthetic \
-  --eval-domains real_only real_plus_synthetic \
-  --models mobilenet_v2 resnet18 efficientnet_b0 \
-  --seeds 42 43 44
+python cleancam_pipeline.py \
+    --release-root /data/CleanCam_release \
+    --output-root  ./output \
+    --run-benchmark \
+    --models mobilenet_v2 resnet18 efficientnet_b0 \
+    --seeds 42 43 44 \
+    --benchmark-settings \
+        train_real_only__eval_real_only \
+        train_real_plus_synthetic__eval_real_only
 ```
 
-### Outputs
-
-Each run writes its own directory:
-
-```text
-<output-root>/
-├── train-<train_split>/
-│   └── eval-<eval_domain>/
-│       └── <model>/
-│           └── seed-<seed>/
-│               ├── best.pt
-│               ├── history.csv
-│               ├── metrics.json
-│               ├── val_predictions.csv
-│               ├── test_predictions.csv
-│               └── test_confusion_matrix_normalized.csv
-└── summary/
-    ├── all_runs.csv
-    ├── aggregate_all_settings.csv
-    ├── paper_table_5class_real_only.csv
-    └── paper_table_binary_real_only.csv
-```
-
-## Optional W&B logging
-
-W&B logging is optional.
-
+**Run with ordinal regression methods:**
 ```bash
-python benchmark/run_benchmark.py \
-  --dataset-root /path/to/CleanCam \
-  --output-root /path/to/benchmark_results \
-  --eval-domains real_only \
-  --use-wandb \
-  --wandb-project cleancam-benchmark \
-  --wandb-entity <entity>
+python cleancam_pipeline.py \
+    --release-root /data/CleanCam_release \
+    --output-root  ./output \
+    --run-benchmark \
+    --models mobilenet_v2 resnet18 efficientnet_b0 \
+    --ordinal-methods coral corn \
+    --seeds 42 43 44
 ```
+
+---
+
+## Models
+
+### Architectures
+
+Three ImageNet-pretrained CNN architectures are evaluated:
+
+| Model | Parameters | Notes |
+|-------|-----------|-------|
+| MobileNetV2 | ~3.4M | Lightweight, mobile-oriented |
+| ResNet-18 | ~11.7M | Standard residual network |
+| EfficientNet-B0 | ~5.3M | Compound-scaled efficient network |
+
+All models are fine-tuned end-to-end with the final classification head replaced for the 5-class ordinal task.
+
+### Loss Functions
+
+| Method | Flag | Description |
+|--------|------|-------------|
+| Cross-Entropy | *(default)* | Standard nominal classification loss |
+| CORAL | `--ordinal-methods coral` | Consistent Rank Logits; binary cumulative loss with weight sharing |
+| CORN | `--ordinal-methods corn` | Conditional Ordinal Regression; conditional probability chain |
+
+**CORAL** replaces the final linear layer with a `CoralLayer` (from `coral-pytorch`) and optimizes binary cross-entropy over cumulative rank thresholds.
+
+**CORN** replaces the final linear layer with a standard `nn.Linear(in_features, num_classes - 1)` and optimizes the conditional ordinal loss from `coral-pytorch`.
+
+Both ordinal methods output `num_classes - 1` logits and convert predictions to class labels via threshold-based decoding.
+
+### Training Protocol
+
+- Optimizer: AdamW
+- Scheduler: ReduceLROnPlateau (factor=0.5, patience=2)
+- Early stopping: based on validation macro-F1 (patience configurable)
+- Sampling: class-balanced weighted random sampling (default)
+- Mixed precision: AMP enabled by default on CUDA
+- Multi-GPU: DataParallel enabled by default when multiple GPUs are available
+- Reproducibility: deterministic algorithms enforced per seed (`torch.use_deterministic_algorithms(True)`, `cudnn.deterministic=True`, `cudnn.benchmark=False`)
+
+---
+
+## Evaluation Metrics
+
+The following metrics are reported per model, setting, and seed, then aggregated (mean ± std) across seeds:
+
+| Metric | Description |
+|--------|-------------|
+| Accuracy | Overall classification accuracy |
+| Macro-F1 | Unweighted mean F1 across all 5 classes |
+| Quadratic Weighted Kappa | Agreement metric penalizing ordinal distance |
+| MAE | Mean absolute error between predicted and true labels |
+| Within-1 Accuracy | Fraction of predictions within ±1 label of ground truth |
+| Per-class Precision / Recall / F1 | Per-label breakdown |
+| Binary Precision / Recall / F1 | Clean (L1) vs. dirty (L2–L5) |
+| Binary AUROC / AUPRC | Binary discrimination metrics |
+
+---
+
+## Outputs
+
+All outputs are written to the specified `--output-root` directory:
+
+```
+output/
+├── tables/
+│   ├── benchmark_summary_main.csv / .tex
+│   ├── benchmark_summary_per_class.csv
+│   ├── benchmark_summary_binary.csv / .tex
+│   ├── benchmark_improvement_summary.csv / .tex
+│   ├── benchmark_setting_manifest.csv
+│   ├── release_composition.csv
+│   ├── integrity_audit.csv
+│   └── ...
+├── figures/
+│   ├── benchmark_macro_f1.png
+│   ├── benchmark_weighted_kappa.png
+│   ├── benchmark_mae.png
+│   ├── confusion_mean_<model>_<setting>.png
+│   ├── label_distribution_overall.png
+│   └── ...
+├── summaries/
+│   ├── benchmark_summary.json
+│   ├── characterization_summary.json
+│   ├── integrity_summary.json
+│   ├── environment_summary.json
+│   └── ...
+└── benchmark/
+    └── <model>[_<ordinal_method>]/
+        └── <setting>/
+            └── seed_<N>/
+                ├── best_<model>_<setting>_seed<N>.pt
+                ├── train_log_<model>_<setting>_seed<N>.csv
+                ├── test_predictions_<model>_<setting>_seed<N>.csv
+                └── confusion_matrix_test_norm.png
+```
+
+---
+
+## Reproducibility
+
+All experiments are fully reproducible given the same seed. The following measures are applied:
+
+- `random.seed(seed)`
+- `numpy.random.seed(seed)`
+- `torch.manual_seed(seed)` and `torch.cuda.manual_seed_all(seed)`
+- `torch.use_deterministic_algorithms(True)`
+- `torch.backends.cudnn.deterministic = True`
+- `torch.backends.cudnn.benchmark = False`
+
+Note: DataParallel across multiple GPUs may introduce minor floating-point non-determinism. Use `--single-gpu` for strict reproducibility.
+
+---
+
+## Experiment Tracking
+
+Weights & Biases integration is available via `--use-wandb`. Each run is logged with a unique name encoding the model, ordinal method, benchmark setting, and seed:
+
+```
+<prefix>-<model>[-<ordinal_method>]-<setting>-seed<N>
+```
+
+Runs are grouped by model and setting for easy comparison in the W&B dashboard.
+
+---
+
+## References
+
+- **CORAL:** Cao, W., Mirjalili, V., & Raschka, S. (2020). Rank Consistent Ordinal Regression for Neural Networks with Application to Age Estimation. *Pattern Recognition Letters*, 140, 325–331. [arXiv:1901.07884](https://arxiv.org/abs/1901.07884)
+- **CORN:** Shi, X., Cao, W., & Raschka, S. (2021). Deep Neural Networks for Rank-Consistent Ordinal Regression Based On Conditional Probabilities. [arXiv:2111.08851](https://arxiv.org/abs/2111.08851)
+- **coral-pytorch:** [https://raschka-research-group.github.io/coral-pytorch/](https://raschka-research-group.github.io/coral-pytorch/)
+- **MobileNetV2:** Sandler, M. et al. (2018). MobileNetV2: Inverted Residuals and Linear Bottlenecks. *CVPR*.
+- **ResNet:** He, K. et al. (2016). Deep Residual Learning for Image Recognition. *CVPR*.
+- **EfficientNet:** Tan, M. & Le, Q. (2019). EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks. *ICML*.
+
+---
 
 ## License
 
-This repository's **code** is released under the **MIT License**. See `LICENSE`.
-
-The **dataset** is distributed separately through Zenodo under the license declared on the dataset record.
+This project is released under the MIT License. See [LICENSE](LICENSE) for details.
