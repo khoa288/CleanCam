@@ -1,5 +1,33 @@
 # Python
 __pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/
+
+# Local and generated data
 /data/
+/raw/
+/CleanCam_release/
 /output/
 /tests/
+
+# Large generated archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Experiment tracking
+wandb/
