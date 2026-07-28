@@ -1,0 +1,12 @@
+asset_id,description,preparation_category,asset_split
+A_0001,Diatomaceous biofilm,author-prepared RGBA asset,train
+A_0002,Aquatic bryophyte fouling,author-prepared RGBA asset,train
+A_0003,Microphytobenthic diatoms,author-prepared RGBA asset,train
+A_0004,Synthetic Ulva foliose macroalgae (heavy),procedural Blender asset,train
+A_0005,Synthetic Ulva foliose macroalgae (medium),procedural Blender asset,train
+A_0006,Synthetic Ulva foliose macroalgae (light),procedural Blender asset,val
+A_0007,Synthetic Ulva foliose macroalgae (medium),procedural Blender asset,val
+A_0008,Synthetic abiotic sedimentation,procedural Blender asset,val
+A_0009,Synthetic translucent exopolymeric film,procedural Blender asset,test
+A_0010,Abiotic particulate fouling,author-prepared RGBA asset,test
+A_0011,Synthetic benthic macroalgae,procedural Blender asset,test

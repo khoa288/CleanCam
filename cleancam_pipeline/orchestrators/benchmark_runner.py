@@ -100,6 +100,9 @@ def run_benchmark(
                     )
                     # Add ordinal_method to result for tracking
                     result["ordinal_method"] = ordinal_method
+                    # Keep each output-head variant separate during aggregation.
+                    if ordinal_method:
+                        result["model_name"] = f"{model_name}_{ordinal_method}"
                     run_results.append(result)
 
     manifest_df = pd.DataFrame(manifest_rows)

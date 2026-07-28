@@ -7,14 +7,13 @@ The builder creates a release folder containing:
 - real and synthetic images organised by label;
 - master metadata and subset-specific metadata tables;
 - official capture-disjoint train/validation/test split files;
-- a dirt-asset manifest, skipped-file log, split summary, and build summary;
+- a dirt-asset manifest, split summary, and build summary;
 - a README and a copy of this builder script.
 
 The official split is deterministic at the capture level. Synthetic images are
 created only from parents inside the same split, so parent information does not
-cross train, validation, or test boundaries. Original real-image filenames are
-validated strictly; malformed or duplicated logical captures are excluded from
-the public release and recorded in metadata/skipped_real_images.csv.
+cross train, validation, or test boundaries. All curated real-image filenames
+must pass the release schema, and every derived image identifier must be unique.
 """
 
 from __future__ import annotations
@@ -53,7 +52,7 @@ class BuildConfig:
     dataset_root: str = "raw/label_by_cam_artifacts"
     dirt_assets_dir: str = "raw/dirt_assets"
     release_root: str = "CleanCam_release"
-    release_tag: str = "v1"
+    release_tag: str = "v2.0.0"
     seed: int = 42
     num_workers: int = max(1, (os.cpu_count() or 2) - 1)
     image_exts: Tuple[str, ...] = (".jpg", ".jpeg", ".png")
@@ -324,7 +323,7 @@ def parse_metadata_from_filename(filename: str) -> Dict[str, object]:
     - cam1 and cam2 must match
     - timecode1 and timecode2 must match
 
-    Invalid files are skipped from the public release and logged.
+    Invalid filenames cause the release build to stop.
     """
     name = os.path.basename(filename)
     m = _ORIGINAL_FILENAME_RE.match(name)
@@ -568,26 +567,6 @@ def align_public_metadata_schema(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def empty_skipped_real_df() -> pd.DataFrame:
-    return pd.DataFrame(
-        columns=[
-            "skip_reason",
-            "label",
-            "source_filename",
-            "logical_image_id",
-            "cam",
-            "state",
-            "day",
-            "sec",
-            "prefix_date",
-            "capture_date1",
-            "capture_date2",
-            "timecode1",
-            "timecode2",
-        ]
-    )
-
-
 def _validate_config(cfg: BuildConfig) -> None:
     _validate_official_split_config(cfg)
 
@@ -607,13 +586,12 @@ def _validate_config(cfg: BuildConfig) -> None:
 # ============================================================
 
 
-def index_and_copy_real_images(cfg: BuildConfig, release_root: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def index_and_copy_real_images(cfg: BuildConfig, release_root: Path) -> pd.DataFrame:
     dataset_root = Path(cfg.dataset_root)
     real_root = release_root / "images" / "real"
     ensure_dir(real_root)
 
     rows: List[Dict[str, object]] = []
-    skipped_rows: List[Dict[str, object]] = []
     seen_image_ids: Set[str] = set()
 
     label_dirs = sorted(
@@ -634,24 +612,11 @@ def index_and_copy_real_images(cfg: BuildConfig, release_root: Path) -> Tuple[pd
             parsed = parse_metadata_from_filename(src_path.name)
 
             if not parsed["valid"]:
-                skipped_rows.append(
-                    {
-                        "skip_reason": parsed.get("reason", "invalid_filename"),
-                        "label": label,
-                        "source_filename": src_path.name,
-                        "logical_image_id": pd.NA,
-                        "cam": parsed.get("cam1", pd.NA),
-                        "state": pd.NA,
-                        "day": parsed.get("capture_date1", pd.NA),
-                        "sec": parsed.get("sec", pd.NA),
-                        "prefix_date": parsed.get("prefix_date", pd.NA),
-                        "capture_date1": parsed.get("capture_date1", pd.NA),
-                        "capture_date2": parsed.get("capture_date2", pd.NA),
-                        "timecode1": parsed.get("timecode1", pd.NA),
-                        "timecode2": parsed.get("timecode2", pd.NA),
-                    }
+                raise RuntimeError(
+                    "Real-image filename validation failed: "
+                    f"label={label}, filename={src_path.name}, "
+                    f"reason={parsed.get('reason', 'invalid_filename')}"
                 )
-                continue
 
             cam = str(parsed["cam"])
             state = str(parsed["state"])
@@ -660,24 +625,10 @@ def index_and_copy_real_images(cfg: BuildConfig, release_root: Path) -> Tuple[pd
 
             image_id = make_real_image_id(cam, state, day, sec)
             if image_id in seen_image_ids:
-                skipped_rows.append(
-                    {
-                        "skip_reason": "duplicate_logical_capture",
-                        "label": label,
-                        "source_filename": src_path.name,
-                        "logical_image_id": image_id,
-                        "cam": cam,
-                        "state": state,
-                        "day": day,
-                        "sec": sec,
-                        "prefix_date": parsed.get("prefix_date", pd.NA),
-                        "capture_date1": parsed.get("capture_date1", pd.NA),
-                        "capture_date2": parsed.get("capture_date2", pd.NA),
-                        "timecode1": parsed.get("timecode", pd.NA),
-                        "timecode2": parsed.get("timecode", pd.NA),
-                    }
+                raise RuntimeError(
+                    "Real-image identifier validation failed: "
+                    f"image_id={image_id}, label={label}, filename={src_path.name}"
                 )
-                continue
 
             seen_image_ids.add(image_id)
 
@@ -729,16 +680,8 @@ def index_and_copy_real_images(cfg: BuildConfig, release_root: Path) -> Tuple[pd
     real_df = pd.DataFrame(rows)
     real_df = real_df.sort_values(["label", "cam", "state", "day", "sec"]).reset_index(drop=True)
 
-    skipped_df = pd.DataFrame(skipped_rows)
-    if len(skipped_df) == 0:
-        skipped_df = empty_skipped_real_df()
-
-    print(f"Kept real images: {len(real_df)}")
-    print(f"Skipped real images: {len(skipped_df)}")
-    if len(skipped_df) > 0:
-        print("Skipped breakdown:", skipped_df["skip_reason"].value_counts().to_dict())
-
-    return real_df, skipped_df
+    print(f"Released real images: {len(real_df)}")
+    return real_df
 
 
 # ============================================================
@@ -1625,7 +1568,6 @@ This release was generated by `build_cleancam_release.py` with release tag `{cfg
 - `metadata/metadata_real.csv`: real-image subset.
 - `metadata/metadata_synthetic.csv`: synthetic-image subset.
 - `metadata/dirt_assets_manifest.csv`: dirt asset manifest.
-- `metadata/skipped_real_images.csv`: excluded real files and exclusion reasons.
 - `metadata/split_summary.csv`: counts for the official recommended splits.
 - `splits/official/`: official train/val/test split files for both real-only and real+synthetic benchmarks.
 
@@ -1685,7 +1627,9 @@ This yields four official train/eval settings:
 
 ## Release integrity policy
 
-Original real filenames are validated strictly. Files with malformed structure, camera/timecode inconsistency, date inconsistency, or duplicated logical capture identifiers are excluded from the public release and recorded in `metadata/skipped_real_images.csv`.
+Original real filenames are validated against the expected camera, date,
+timecode, and elapsed-second schema. The build stops if an input violates that
+schema or maps to a non-unique image identifier.
 """
     (release_root / "README.md").write_text(readme, encoding="utf-8")
 
@@ -1707,7 +1651,6 @@ def write_metadata_outputs(
     synthetic_splits: Dict[str, pd.DataFrame],
     asset_manifest_df: pd.DataFrame,
     asset_subsets: Dict[str, pd.DataFrame],
-    skipped_real_df: pd.DataFrame,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     meta_root = release_root / "metadata"
     ensure_dir(meta_root)
@@ -1728,13 +1671,11 @@ def write_metadata_outputs(
     }
     asset_manifest_public = sanitize_public_dataframe(asset_manifest_df).copy()
     asset_manifest_public["asset_split"] = asset_manifest_public["asset_id"].astype(str).map(asset_split_lookup)
-    skipped_real_public = sanitize_public_dataframe(skipped_real_df).copy()
 
     write_dataframe(metadata_df, meta_root / "metadata.csv")
     write_dataframe(real_public, meta_root / "metadata_real.csv")
     write_dataframe(synth_public, meta_root / "metadata_synthetic.csv")
     write_dataframe(asset_manifest_public, meta_root / "dirt_assets_manifest.csv")
-    write_dataframe(skipped_real_public, meta_root / "skipped_real_images.csv")
 
     return metadata_df, synth_public
 
@@ -1765,7 +1706,6 @@ def build_summary_json(
     real_df: pd.DataFrame,
     synthetic_splits: Dict[str, pd.DataFrame],
     metadata_df: pd.DataFrame,
-    skipped_real_df: pd.DataFrame,
     summary_df: pd.DataFrame,
     asset_subsets: Dict[str, pd.DataFrame],
 ) -> None:
@@ -1780,8 +1720,6 @@ def build_summary_json(
         "real_count": int(len(real_df)),
         "synthetic_count": int(len(synth_df)),
         "total_count": int(len(metadata_df)),
-        "skipped_real_count": int(len(skipped_real_df)),
-        "skipped_real_reason_counts": skipped_real_df["skip_reason"].value_counts().to_dict() if len(skipped_real_df) else {},
         "real_label_counts": count_by_label(real_df),
         "synthetic_label_counts": count_by_label(synth_df) if len(synth_df) else {},
         "synthetic_split_counts": {split_name: int(len(df)) for split_name, df in synthetic_splits.items()},
@@ -1811,7 +1749,7 @@ def run(cfg: BuildConfig) -> None:
     release_root = Path(cfg.release_root)
 
     clean_existing_release_root(release_root)
-    real_df, skipped_real_df = index_and_copy_real_images(cfg, release_root)
+    real_df = index_and_copy_real_images(cfg, release_root)
 
     official_real_splits = build_official_real_splits(real_df, cfg)
 
@@ -1856,17 +1794,23 @@ def run(cfg: BuildConfig) -> None:
         synthetic_splits,
         asset_manifest_df,
         asset_subsets,
-        skipped_real_df,
     )
     split_summary_df = write_all_splits(release_root, official_splits)
-    build_summary_json(cfg, release_root, real_df, synthetic_splits, metadata_df, skipped_real_df, split_summary_df, asset_subsets)
+    build_summary_json(
+        cfg,
+        release_root,
+        real_df,
+        synthetic_splits,
+        metadata_df,
+        split_summary_df,
+        asset_subsets,
+    )
     write_release_readme(cfg, release_root)
     copy_builder_script(release_root)
 
     print("\nBuild finished.")
     print(f"Release root: {release_root}")
-    print(f"Real images kept: {len(real_df)}")
-    print(f"Real images skipped: {len(skipped_real_df)}")
+    print(f"Released real images: {len(real_df)}")
     print(f"Released synthetic images: {len(synth_public)}")
     for split_name in [
         "train_real_only",

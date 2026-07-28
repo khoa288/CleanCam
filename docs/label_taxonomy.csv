@@ -1,0 +1,6 @@
+level,name,viewport_condition,cleaning_interpretation
+1,Clean,"Clean viewport. Visibility may still be affected by water, particles, or lighting.",No cleaning is indicated by the image alone.
+2,Light,"Light local deposits, with the view still largely usable.","Cleaning is not urgent; continue monitoring."
+3,Moderate,Clear deposits affecting part of the field of view.,Inspect or clean if the condition persists or conflicts with the monitoring task.
+4,Severe,Severe deposits or smearing that interfere with routine interpretation.,Cleaning is recommended before routine image-based monitoring continues.
+5,Heavy,Heavy obstruction or blur that strongly compromises scene interpretation.,Cleaning is required before treating the image stream as reliable.

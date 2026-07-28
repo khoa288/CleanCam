@@ -1,0 +1,45 @@
+file,column,type,applies_to,description
+metadata/*.csv,image_id,string,all,Stable release identifier for one image.
+metadata/*.csv,origin,category,all,Image origin: real or synthetic.
+metadata/*.csv,synthetic,boolean,all,True for generated images and False for field images.
+metadata/*.csv,label,integer 1-5,all,Released ordinal viewport-fouling label.
+metadata/*.csv,source_label,integer 1-5,all,Label of the real source image; equals label for real images.
+metadata/*.csv,target_label,integer 1-5,all,Requested released label; equals label for accepted records.
+metadata/*.csv,cam,category,all,Camera node identifier inherited from the real capture.
+metadata/*.csv,state,category,all,Recording session state: morning or evening.
+metadata/*.csv,cam_state,string,all,Combined camera and session identifier.
+metadata/*.csv,day,YYYYMMDD,all,Calendar date of the real capture.
+metadata/*.csv,sec,integer,all,Elapsed second within the source capture.
+metadata/*.csv,capture_id,string,all,Camera-session-date unit used for leakage-controlled splitting.
+metadata/*.csv,block_index,integer,all,Ten-minute temporal block index within a capture.
+metadata/*.csv,group_id,string,all,Capture plus temporal-block grouping identifier.
+metadata/*.csv,synthetic_split,category,synthetic,Inherited train validation or test split.
+metadata/*.csv,asset_split,category,synthetic,Disjoint train validation or test pool assigned to the asset.
+metadata/*.csv,parent_image_id,string,synthetic,Image identifier of the real parent.
+metadata/*.csv,parent_label,integer 1-5,synthetic,Released label of the real parent.
+metadata/*.csv,width,integer,all,Image width in pixels.
+metadata/*.csv,height,integer,all,Image height in pixels.
+metadata/*.csv,relative_path,string,all,POSIX path relative to the extracted release root.
+metadata/*.csv,source_filename,string,real,Original curated source filename.
+metadata/*.csv,asset_id,string,synthetic,Stable identifier of the RGBA deposit asset.
+metadata/*.csv,asset_filename,string,synthetic,Original filename of the deposit asset.
+metadata/*.csv,rotation_deg,integer,synthetic,Random clockwise asset rotation in degrees.
+metadata/*.csv,coverage_scale,float,synthetic,Asset resize scale used to cover the parent frame.
+metadata/*.csv,blur_scale_factor,integer,synthetic,Downsample-upsample factor applied to the transformed asset.
+metadata/*.csv,opacity,float,synthetic,Global opacity multiplier sampled from 0.10 to 0.60.
+metadata/*.csv,avg_blockage,float,synthetic,Mean effective alpha over the generated image.
+metadata/*.csv,label_boost,integer,synthetic,Ordinal increment derived from average blockage.
+metadata/*.csv,synthetic_seed,integer,synthetic,Per-attempt deterministic random seed.
+metadata/*.csv,generator_version,string,synthetic,Generator version string stored at creation.
+metadata/*.csv,sha256,string,all,Optional image checksum field; consult the release file manifest for complete checksums.
+metadata/dirt_assets_manifest.csv,asset_id,string,assets,Stable identifier matching synthetic metadata.
+metadata/dirt_assets_manifest.csv,asset_filename,string,assets,Original asset filename.
+metadata/dirt_assets_manifest.csv,release_relative_path,string,assets,Path to the released RGBA asset.
+metadata/dirt_assets_manifest.csv,asset_split,category,assets,Disjoint train validation or test asset pool.
+metadata/dirt_assets_manifest.csv,description,string,assets,Human-readable deposit or fouling description.
+metadata/dirt_assets_manifest.csv,preparation_category,category,assets,Author-prepared or procedural Blender preparation category.
+metadata/dirt_assets_manifest.csv,width,integer,assets,Asset width in pixels.
+metadata/dirt_assets_manifest.csv,height,integer,assets,Asset height in pixels.
+metadata/dirt_assets_manifest.csv,mode,string,assets,Pillow image mode; RGBA is expected.
+metadata/dirt_assets_manifest.csv,sha256,string,assets,SHA-256 checksum of the released asset file.
+splits/official/*.csv,all metadata fields,mixed,all,Rows copied from master metadata for one official split variant.

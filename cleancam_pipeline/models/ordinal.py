@@ -131,38 +131,34 @@ def get_ordinal_probabilities(
         Class probabilities [batch_size, num_classes]
     """
     if method == "coral":
-        # CORAL: Convert cumulative probabilities to class probabilities
-        cumulative_probs = torch.sigmoid(logits)
-        # Add boundaries
-        cumulative_probs = torch.cat(
+        # Each output estimates P(Y > k). Adjacent survival probabilities
+        # therefore define the probability mass of the intervening class.
+        survival_probs = torch.sigmoid(logits)
+        class_probs = torch.cat(
             [
-                torch.zeros(cumulative_probs.size(0), 1, device=logits.device),
-                cumulative_probs,
-                torch.ones(cumulative_probs.size(0), 1, device=logits.device),
+                1.0 - survival_probs[:, :1],
+                survival_probs[:, :-1] - survival_probs[:, 1:],
+                survival_probs[:, -1:],
             ],
             dim=1,
         )
-        # Compute class probabilities
-        class_probs = cumulative_probs[:, 1:] - cumulative_probs[:, :-1]
-        return class_probs
+        # Guard against small monotonicity violations in unconstrained logits.
+        class_probs = class_probs.clamp_min(0.0)
+        return class_probs / class_probs.sum(dim=1, keepdim=True).clamp_min(1e-12)
     
     elif method == "corn":
-        # CORN: Convert conditional probabilities to class probabilities
+        # CORN outputs conditional survival probabilities. Their cumulative
+        # products give P(Y > k), from which class probabilities follow.
         conditional_probs = torch.sigmoid(logits)
-        # Compute class probabilities using the chain rule
-        class_probs = []
-        for k in range(logits.size(1) + 1):
-            if k == 0:
-                # P(Y=0) = 1 - P(Y>0)
-                prob = 1.0 - conditional_probs[:, 0]
-            elif k == logits.size(1):
-                # P(Y=K) = P(Y>K-1)
-                prob = conditional_probs[:, k - 1]
-            else:
-                # P(Y=k) = P(Y>k-1) - P(Y>k)
-                prob = conditional_probs[:, k - 1] - conditional_probs[:, k]
-            class_probs.append(prob.unsqueeze(1))
-        return torch.cat(class_probs, dim=1)
+        survival_probs = torch.cumprod(conditional_probs, dim=1)
+        return torch.cat(
+            [
+                1.0 - survival_probs[:, :1],
+                survival_probs[:, :-1] - survival_probs[:, 1:],
+                survival_probs[:, -1:],
+            ],
+            dim=1,
+        )
     
     else:
         raise ValueError(f"Unknown ordinal method: {method}")

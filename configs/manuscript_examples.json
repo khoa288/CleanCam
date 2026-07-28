@@ -1,0 +1,46 @@
+{
+  "figure_2_real": {
+    "1": [
+      "R_cambot1_morning_20250916_002690",
+      "R_cambot2_morning_20250913_000010",
+      "R_cambot1_evening_20250911_003430"
+    ],
+    "2": [
+      "R_cambot2_morning_20250916_003050",
+      "R_cambot2_morning_20250916_003290",
+      "R_cambot2_morning_20250916_002370"
+    ],
+    "3": [
+      "R_cambot1_morning_20250918_001880",
+      "R_cambot2_evening_20250918_001140",
+      "R_cambot2_evening_20250915_000210"
+    ],
+    "4": [
+      "R_cambot2_evening_20250911_002650",
+      "R_cambot2_evening_20250915_001350",
+      "R_cambot2_evening_20250917_000490"
+    ],
+    "5": [
+      "R_cambot1_morning_20250917_001540",
+      "R_cambot2_morning_20250831_000800",
+      "R_cambot1_morning_20250917_001680"
+    ]
+  },
+  "figure_4_synthetic": {
+    "3": [
+      "S_0000054",
+      "S_0008784",
+      "S_0000433"
+    ],
+    "4": [
+      "S_0003357",
+      "S_0002744",
+      "S_0003036"
+    ],
+    "5": [
+      "S_0003842",
+      "S_0005630",
+      "S_0003546"
+    ]
+  }
+}

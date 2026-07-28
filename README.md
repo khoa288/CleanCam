@@ -1,57 +1,76 @@
-# CleanCam: A Labelled Image Dataset for Camera-Cleaning Decisions
+# CleanCam
 
-CleanCam is a labelled underwater-image dataset for camera-health assessment in aquaculture monitoring. It separates water-column degradation from material attached to the camera viewport, so the label is tied to a camera-cleaning decision rather than generic image quality.
+CleanCam is a labelled underwater-image dataset for assessing material
+attached to camera viewports in aquaculture monitoring. Its five ordered
+levels describe cleaning severity rather than generic image quality, helping
+separate persistent viewport deposits from turbidity, suspended particles,
+lighting changes, and other water-column effects.
 
-The dataset contains real field images, split-consistent synthetic viewport-fouling images, metadata tables, capture-disjoint train/validation/test splits, and benchmark code for ordinal cleaning-severity classification.
+The validated v2 release contains:
 
-Dataset DOI: https://doi.org/10.5281/zenodo.18952474
+- 18,972 field-captured RGB JPEG images;
+- 3,600 split-consistent synthetic RGB JPEG images for Levels 3–5;
+- 22,572 images in total, all at 3072 × 2048 pixels;
+- image-level metadata and a complete data dictionary;
+- capture-disjoint train, validation, and test splits;
+- 11 documented RGBA deposit assets in disjoint split pools; and
+- synthetic parentage, transformation parameters, seeds, and checksums.
 
----
+Dataset v2.0.0 DOI: <https://doi.org/10.5281/zenodo.21515620>
+
+Concept DOI (all versions): <https://doi.org/10.5281/zenodo.18952473>
+
+Current release: v2.0.0
 
 ## Repository contents
 
 ```text
 CleanCam/
-├── cleancam_pipeline/              # Analysis and benchmark package
-├── cleancam_pipeline.py            # Main benchmark/analysis CLI
+├── cleancam_pipeline/                 # Analysis and optional benchmark package
+├── configs/
+│   └── manuscript_examples.json       # Fixed image IDs used in Figures 2 and 4
+├── docs/
+│   ├── acquisition_conditions.md
+│   ├── data_dictionary.csv
+│   ├── deposit_assets.md
+│   ├── deposit_assets.csv
+│   ├── label_taxonomy.csv
+│   ├── manuscript_reproducibility.md
+│   └── quickstart.md
 ├── scripts/
-│   └── build_cleancam_release.py   # Dataset release builder
-├── requirements.txt
-├── README.md
-└── LICENSE
+│   ├── build_cleancam_release.py
+│   ├── finalize_cleancam_v2.py
+│   ├── reproduce_manuscript.py
+│   └── validate_release.py
+├── requirements.txt                  # Pinned core reproduction environment
+├── requirements-benchmark.txt        # Optional PyTorch benchmark stack
+└── requirements-dev.txt
 ```
 
-This GitHub repository contains code, documentation, and reproducibility scripts. The image dataset is hosted separately on Zenodo.
+The image dataset is hosted on Zenodo and is intentionally not stored in this
+Git repository.
 
-Do not commit raw local images, generated dataset folders, benchmark outputs, or large archives directly to this repository.
+## Dataset structure
 
----
-
-## Dataset
-
-The CleanCam dataset is available on Zenodo:
-
-> Nguyen, M. K., Hoang, T. A., Tran, N. N. A., Tran, N. N. A., Pham, M. H., Phan, T. K., Nguyen, V. D., Dinh, V. D., & Do, D. C. (2026). *CleanCam: a labelled image dataset for camera-cleaning decisions in aquaculture monitoring* (v1.0.0) [Data set]. Zenodo. https://doi.org/10.5281/zenodo.18952474
-
-After downloading and extracting the dataset, the expected structure is:
+After downloading and extracting `CleanCam_v2.zip`, the top-level structure is:
 
 ```text
-CleanCam_release/
+CleanCam_v2/
 ├── images/
-│   ├── real/                        # Curated field-captured images
-│   └── synthetic/                   # Split-consistent synthetic viewport-fouling images
+│   ├── real/
+│   └── synthetic/
 ├── assets/
-│   └── dirt_assets/                 # Deposit assets used by the synthetic generator, if included
+│   └── dirt_assets/
 ├── code/
-│   └── build_cleancam_release.py    # Builder script copied into the dataset package
+├── documentation/
 ├── metadata/
-│   ├── metadata.csv                 # Master metadata table, real + synthetic
+│   ├── metadata.csv
 │   ├── metadata_real.csv
 │   ├── metadata_synthetic.csv
 │   ├── dirt_assets_manifest.csv
-│   ├── skipped_real_images.csv
 │   ├── split_summary.csv
-│   └── build_summary.json
+│   ├── build_summary.json
+│   └── file_manifest_sha256.csv
 └── splits/
     └── official/
         ├── train_real_only.csv
@@ -62,188 +81,124 @@ CleanCam_release/
         └── test_real_plus_synthetic.csv
 ```
 
-The official splits are partitioned at the `capture_id` level. Synthetic images inherit the split of their real parent image, which prevents parent-image information from crossing train, validation, and test partitions.
-
----
+Synthetic images inherit the split of their real parent image. Deposit assets
+are also partitioned into disjoint train, validation, and test pools.
 
 ## Label taxonomy
 
-| Label | Viewport condition | Cleaning interpretation |
+| Level | Viewport condition | Cleaning interpretation |
 |---:|---|---|
-| 1 | Clean viewport. Visibility may still be affected by water, particles, or lighting. | No cleaning is indicated by the image alone. |
-| 2 | Light local deposits, with the view still largely usable. | Cleaning is not urgent; continue monitoring. |
-| 3 | Clear deposits affecting part of the field of view. | Inspect or clean if the condition persists or conflicts with the monitoring task. |
-| 4 | Severe deposits or smearing interfering with routine interpretation. | Cleaning is recommended before routine image-based monitoring continues. |
-| 5 | Heavy obstruction or blur that strongly compromises scene interpretation. | Cleaning is required before treating the image stream as reliable. |
+| L1 | Clean viewport. Visibility may still be affected by water, particles, or lighting. | No cleaning is indicated by the image alone. |
+| L2 | Light local deposits; the view remains largely usable. | Cleaning is not urgent; continue monitoring. |
+| L3 | Clear deposits affect part of the field of view. | Inspect or clean if the condition persists or conflicts with the monitoring task. |
+| L4 | Severe deposits or smearing interfere with routine interpretation. | Cleaning is recommended before routine image-based monitoring continues. |
+| L5 | Heavy obstruction or blur strongly compromises scene interpretation. | Cleaning is required before treating the image stream as reliable. |
 
----
+The machine-readable definitions are in
+[`docs/label_taxonomy.csv`](docs/label_taxonomy.csv).
 
-## Installation
+## Core installation
+
+Python 3.11 is the frozen v2 reproduction environment.
 
 ```bash
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
-
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-Python 3.8+ is recommended. CUDA is optional but useful for CNN benchmarking.
+The core environment reproduces release validation and manuscript outputs
+without PyTorch.
 
----
-
-## Build the dataset package from local source files
-
-Use `scripts/build_cleancam_release.py` only if you need to rebuild the dataset package from curated local source images and deposit assets.
-
-### Expected local inputs
-
-Keep these folders local. They should not be committed to GitHub.
-
-```text
-raw/
-├── label_by_cam_artifacts/
-│   ├── 1/
-│   ├── 2/
-│   ├── 3/
-│   ├── 4/
-│   └── 5/
-└── dirt_assets/
-```
-
-The real-image filename parser is strict. Files with malformed names, camera/date/timecode inconsistencies, or duplicated logical capture identifiers are excluded and recorded in `metadata/skipped_real_images.csv`.
-
-### Build command
+## Reproduce the manuscript outputs
 
 ```bash
-python scripts/build_cleancam_release.py \
-    --dataset-root raw/label_by_cam_artifacts \
-    --dirt-assets-dir raw/dirt_assets \
-    --release-root CleanCam_release \
-    --release-tag v1.0.0 \
-    --compute-sha256
+python scripts/reproduce_manuscript.py \
+  --release-root data/CleanCam_v2 \
+  --output-root output/manuscript
 ```
 
-To inspect all builder options:
+The command regenerates Figures 2–6 and Tables 1–3. It also saves the
+image-level low-level statistics, PCA loadings, PCA explained variance, fixed
+example IDs, package versions, and SHA-256 checksums of all generated outputs.
+Figure 1 is a collection-setup source image and is retained at
+`docs/manuscript_sources/Figure_1_Data_collection_setup.png`.
+
+See [`docs/manuscript_reproducibility.md`](docs/manuscript_reproducibility.md)
+for the item-by-item mapping.
+
+## Validate a release
 
 ```bash
-python scripts/build_cleancam_release.py --help
+python scripts/validate_release.py data/CleanCam_v2
 ```
 
-Common options include:
+For a full image-header pass:
 
-| Argument | Purpose |
-|---|---|
-| `--dataset-root` | Path to curated real images grouped by labels `1` to `5`. |
-| `--dirt-assets-dir` | Path to deposit/viewport-fouling assets used for synthetic generation. |
-| `--release-root` | Output directory for the generated dataset package. |
-| `--release-tag` | Version tag stored in the generated metadata. |
-| `--target-synthetic-total` | Total number of synthetic images to generate. |
-| `--synthetic-partition-ratios` | Train/validation/test synthetic count ratios. |
-| `--synthetic-target-ratios` | Label distribution for synthetic labels 3, 4, and 5. |
-| `--synthetic-source-mix` | Parent-label mix for each synthetic target label. |
-| `--no-copy-dirt-assets-to-release` | Keep deposit assets out of the generated dataset folder. |
-| `--compute-sha256` | Compute image checksums for metadata and auditing. |
+```bash
+python scripts/validate_release.py \
+  data/CleanCam_v2 \
+  --verify-image-files
+```
 
----
+To verify every public file against the release SHA-256 manifest:
 
-## Run the analysis and benchmark pipeline
+```bash
+python scripts/validate_release.py \
+  data/CleanCam_v2 \
+  --verify-sha256
+```
 
-After downloading or building `CleanCam_release/`, run the analysis and benchmark pipeline with:
+## Optional CNN benchmarks
+
+Install the benchmark stack after the core environment:
+
+```bash
+python -m pip install -r requirements-benchmark.txt
+```
+
+Each supported backbone—MobileNetV2, ResNet-18, and EfficientNet-B0—can use
+the default five-class classification head trained using cross-entropy or an
+ordinal CORAL or CORN head. Omit `--ordinal-methods` for cross-entropy, or list
+one or both ordinal heads.
+
+For example, the following command runs the cross-entropy benchmark:
 
 ```bash
 python cleancam_pipeline.py \
-    --release-root CleanCam_release \
-    --output-root output \
-    --run-all
+  --release-root data/CleanCam_v2 \
+  --output-root output/benchmark \
+  --run-benchmark \
+  --models mobilenet_v2 resnet18 efficientnet_b0 \
+  --seeds 42 43 44
 ```
 
-Run the primary real-domain benchmark settings with:
+Use `--ordinal-methods coral corn` to run both ordinal variants.
 
-```bash
-python cleancam_pipeline.py \
-    --release-root CleanCam_release \
-    --output-root output \
-    --run-benchmark \
-    --models mobilenet_v2 resnet18 efficientnet_b0 \
-    --seeds 42 43 44 \
-    --benchmark-settings \
-        train_real_only__eval_real_only \
-        train_real_plus_synthetic__eval_real_only
-```
+The primary evaluation domain is the real-only validation and test data.
 
-Run ordinal-regression baselines with:
+## Build tooling
 
-```bash
-python cleancam_pipeline.py \
-    --release-root CleanCam_release \
-    --output-root output \
-    --run-benchmark \
-    --models mobilenet_v2 resnet18 efficientnet_b0 \
-    --ordinal-methods coral corn \
-    --seeds 42 43 44
-```
-
----
-
-## Benchmark stages
-
-The pipeline supports five stages:
-
-1. Dataset characterization: label distributions, split composition, example grids, and grouping statistics.
-2. Integrity auditing: capture-disjoint split checks, duplicate checks, near-duplicate checks, and synthetic parent-leakage checks.
-3. Annotation agreement: pairwise agreement, Cohen's kappa, quadratic weighted kappa, and disagreement summaries.
-4. Synthetic data analysis: low-level image statistics, real-versus-synthetic comparisons, parent-child deltas, and PCA visualization.
-5. CNN benchmarking: MobileNetV2, ResNet-18, EfficientNet-B0, cross-entropy, CORAL, and CORN.
-
----
-
-## Main outputs
-
-Pipeline outputs are written under the selected `--output-root`:
-
-```text
-output/
-├── tables/
-├── figures/
-├── summaries/
-└── benchmark/
-```
-
-Common outputs include benchmark summaries, release composition tables, integrity audits, confusion matrices, prediction files, training logs, and model checkpoints.
-
----
-
-## Reproducibility notes
-
-The benchmark pipeline fixes Python, NumPy, and PyTorch seeds per run. It also enables deterministic PyTorch settings where supported. Multi-GPU execution can still introduce minor floating-point nondeterminism, so use `--single-gpu` when strict reproducibility is required.
-
-For dataset-package reproducibility, preserve:
-
-- the Zenodo dataset version and DOI,
-- `metadata/build_summary.json`,
-- `code/build_cleancam_release.py` inside the dataset package,
-- the GitHub commit or release tag used for the code repository.
-
----
+`scripts/build_cleancam_release.py` reconstructs the full release from curated
+source images and RGBA deposit assets. `scripts/finalize_cleancam_v2.py`
+assembles the public documentation, asset descriptions, validation manifest,
+and deterministic ZIP archive from a validated working tree.
 
 ## Citation
 
-If you use CleanCam, please cite the dataset:
-
 ```bibtex
 @dataset{nguyen_2026_cleancam,
-  author    = {Nguyen, Minh Khoa and Hoang, Tuan Anh and Tran, Nhat-Nam Anh and Tran, Nguyet-Nam Anh and Pham, Minh Hoang and Phan, Tuan Khoi and Nguyen, Van Dinh and Dinh, Van Dung and Do, Dinh Cuong},
+  author    = {Nguyen, Minh Khoa and Hoang, Tuan Anh and Tran, Nam Nhat Anh and Tran, Nam Nguyet Anh and Pham, Minh Hoang and Phan, Tuan Khoi and Nguyen, Van Dinh and Dinh, Van Dung and Do, Danh Cuong},
   title     = {CleanCam: a labelled image dataset for camera-cleaning decisions in aquaculture monitoring},
   year      = {2026},
   publisher = {Zenodo},
-  version   = {v1.0.0},
-  doi       = {10.5281/zenodo.18952474},
-  url       = {https://doi.org/10.5281/zenodo.18952474}
+  version   = {2.0.0},
+  doi       = {10.5281/zenodo.21515620},
+  url       = {https://doi.org/10.5281/zenodo.21515620}
 }
 ```
 
----
+## Licenses
 
-## License
-
-This project is released under the MIT License. See [LICENSE](LICENSE) for details.
+The code is released under the MIT License. The dataset release is licensed
+under CC BY 4.0.

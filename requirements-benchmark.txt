@@ -1,0 +1,10 @@
+# Optional CNN and ordinal-regression benchmark environment.
+# Install the core environment first:
+#   python -m pip install -r requirements.txt
+#   python -m pip install -r requirements-benchmark.txt
+torch==2.4.1
+torchvision==0.19.1
+coral-pytorch==1.4.0
+
+# Optional experiment tracking
+# wandb==0.18.3

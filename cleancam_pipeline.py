@@ -1,34 +1,21 @@
 #!/usr/bin/env python3
-"""
-CleanCam dataset-paper analysis pipeline (Fully Refactored).
-
-This is the complete refactored version using only modular components.
-No dependencies on the original monolithic script.
-"""
+"""CleanCam dataset analysis and optional benchmark pipeline."""
 
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import sys
 from pathlib import Path
 
-import torch
-
 from cleancam_pipeline.core import BenchmarkConfig, CleanCamRelease
-from cleancam_pipeline.orchestrators import (
-    run_annotation,
-    run_benchmark,
-    run_characterization,
-    run_integrity,
-    run_synthetic_analysis,
-)
-from cleancam_pipeline.utils import OutputManager, save_json
+from cleancam_pipeline.utils.io import OutputManager, save_json
 
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="CleanCam dataset-paper analysis pipeline (Fully Refactored)"
+        description="CleanCam dataset analysis and optional benchmark pipeline"
     )
     parser.add_argument(
         "--release-root", type=str, required=True, help="Path to CleanCam_release"
@@ -124,22 +111,47 @@ def main() -> None:
 
     cfg = BenchmarkConfig.from_args(args)
 
+    package_versions = {}
+    for package in ("numpy", "pandas", "opencv-python-headless", "Pillow", "matplotlib", "scikit-learn", "scipy"):
+        try:
+            package_versions[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            package_versions[package] = None
+
     env_summary = {
         "python": sys.version,
-        "torch": torch.__version__,
-        "cuda_available": bool(torch.cuda.is_available()),
-        "cuda_device_count": (
-            int(torch.cuda.device_count()) if torch.cuda.is_available() else 0
-        ),
+        "packages": package_versions,
         "benchmark_config": cfg.__dict__,
     }
+    if args.run_benchmark:
+        try:
+            import torch
+        except ImportError as exc:
+            raise RuntimeError(
+                "CNN benchmarking requires requirements-benchmark.txt"
+            ) from exc
+        env_summary.update(
+            {
+                "torch": torch.__version__,
+                "cuda_available": bool(torch.cuda.is_available()),
+                "cuda_device_count": (
+                    int(torch.cuda.device_count()) if torch.cuda.is_available() else 0
+                ),
+            }
+        )
     save_json(env_summary, out.summaries_root / "environment_summary.json")
 
     if args.run_characterization:
+        from cleancam_pipeline.orchestrators.characterization_runner import (
+            run_characterization,
+        )
+
         print("[Stage] characterization", flush=True)
         run_characterization(release, out)
 
     if args.run_integrity:
+        from cleancam_pipeline.orchestrators.integrity_runner import run_integrity
+
         print("[Stage] integrity", flush=True)
         run_integrity(
             release,
@@ -149,16 +161,24 @@ def main() -> None:
         )
 
     if args.run_annotation:
+        from cleancam_pipeline.orchestrators.annotation_runner import run_annotation
+
         if args.annotation_csv is None:
             raise ValueError("--run-annotation requires --annotation-csv")
         print("[Stage] annotation", flush=True)
         run_annotation(Path(args.annotation_csv), out)
 
     if args.run_synthetic_analysis:
+        from cleancam_pipeline.orchestrators.synthetic_runner import (
+            run_synthetic_analysis,
+        )
+
         print("[Stage] synthetic-analysis", flush=True)
         run_synthetic_analysis(release, out, cap=args.synthetic_analysis_cap)
 
     if args.run_benchmark:
+        from cleancam_pipeline.orchestrators.benchmark_runner import run_benchmark
+
         print("[Stage] benchmark", flush=True)
         run_benchmark(release, out, cfg)
 

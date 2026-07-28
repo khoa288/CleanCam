@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use CleanCam, please cite the dataset."
+title: "CleanCam: a labelled image dataset for camera-cleaning decisions in aquaculture monitoring"
+type: dataset
+version: 2.0.0
+date-released: 2026-07-23
+doi: 10.5281/zenodo.21515620
+url: "https://doi.org/10.5281/zenodo.21515620"
+license: CC-BY-4.0
+authors:
+  - family-names: Nguyen
+    given-names: Minh Khoa
+  - family-names: Hoang
+    given-names: Tuan Anh
+  - family-names: Tran
+    given-names: Nam Nhat Anh
+  - family-names: Tran
+    given-names: Nam Nguyet Anh
+  - family-names: Pham
+    given-names: Minh Hoang
+  - family-names: Phan
+    given-names: Tuan Khoi
+  - family-names: Nguyen
+    given-names: Van Dinh
+  - family-names: Dinh
+    given-names: Van Dung
+  - family-names: Do
+    given-names: Danh Cuong
